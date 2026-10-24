@@ -34,9 +34,9 @@ Las versiones de prueba, que todavía no se publicaron como Release, están en l
 | Volumen | De −∞ a +6 dB. |
 | Paneo | Posición estéreo. |
 
-Cada pad tiene además **Gate** (el sonido se corta al soltar la nota), **Silencio**, **Solo** y un grupo de **Corte** (los pads del mismo grupo se cortan entre sí: en el kit analógico, el hihat cerrado corta al abierto). **Velocidad**, debajo de los pads, ajusta cuánto cambia el nivel según la fuerza de cada nota.
+Cada pad tiene además **Gate** (el sonido se corta al soltar la nota), **Silencio**, **Solo**, **Mono** (un golpe nuevo corta al que todavía suena, como en Sitala; viene encendido en todos los pads menos el platillo) y un grupo de **Corte** (los pads del mismo grupo se cortan entre sí: en el kit analógico, el hihat cerrado corta al abierto). **Velocidad**, debajo de los pads, ajusta cuánto cambia el nivel según la fuerza de cada nota.
 
-Todas son parámetros del DAW, con su propia automatización: «P1 Shape», «P1 Tune» … «P16 End», además de «Output» y «Velocity».
+Todas son parámetros del DAW, con su propia automatización: «P1 Shape», «P1 Tune» … «P16 Mono», además de «Output» y «Velocity».
 
 ## Salidas separadas
 

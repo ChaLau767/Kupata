@@ -277,8 +277,8 @@ private:
     Screen screen;
     HitBar hitBar;
     juce::OwnedArray<Knob> knobs;
-    juce::TextButton gateButton, muteButton, soloButton;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> gateAttachment, muteAttachment, soloAttachment;
+    juce::TextButton gateButton, muteButton, soloButton, monoButton;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> gateAttachment, muteAttachment, soloAttachment, monoAttachment;
     juce::ComboBox chokeBox, outBox;
     Segmented stereoSwitch;
     DragValue noteValue;

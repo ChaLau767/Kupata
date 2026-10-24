@@ -157,7 +157,7 @@ private:
     juce::SpinLock telemetryLock;
     int samplesSinceTelemetry = 0;
 
-    struct PadRefs { std::atomic<float> *shape, *tune, *tone, *comp, *volume, *pan, *start, *end, *gate, *mute, *solo; };
+    struct PadRefs { std::atomic<float> *shape, *tune, *tone, *comp, *volume, *pan, *start, *end, *gate, *mute, *solo, *mono; };
     std::array<PadRefs, kupata::numPads> padRefs {};
     std::atomic<float> *gainRef = nullptr, *velocityRef = nullptr;
 

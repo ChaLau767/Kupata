@@ -287,6 +287,21 @@ int main()
         check (std::abs (so.rms (0, 4800, 9600) - hatOnly.rms (0, 4800, 9600)) < 0.02 * hatOnly.rms (0, 4800, 9600) + 1.0e-4, "solo: only the soloed pad sounds");
     }
 
+    // --- mono: a new hit cuts the one still sounding ------------------------------------
+    {
+        const int second = (int) (SR * 0.3);
+        Params m = p; m.velocity = 100.0f;   // so that a hit with velocity 0 is silent
+        e.reset();
+        const Out cut = render (e, m, (int) (SR * 0.6), { on (36), on (36, second, 0.0f) });   // a silent second hit
+        check (cut.peak (0, second + (int) (SR * 0.01), (int) (SR * 0.6)) < 1.0e-3f, "mono: the second hit cuts the first",
+               cut.peak (0, second + (int) (SR * 0.01), (int) (SR * 0.6)));
+        Params q = m; q.pads[0].mono = false;
+        e.reset();
+        const Out over = render (e, q, (int) (SR * 0.6), { on (36), on (36, second, 0.0f) });
+        check (over.peak (0, second + (int) (SR * 0.01), (int) (SR * 0.6)) > 0.1f, "not mono: the first hit rings on",
+               over.peak (0, second + (int) (SR * 0.01), (int) (SR * 0.6)));
+    }
+
     // --- outputs ---------------------------------------------------------------------
     {
         e.routing[0].out = 2;

@@ -155,6 +155,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         group->addChild (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { padId (p, "gate"), 1 }, prefix + "Gate", false));
         group->addChild (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { padId (p, "mute"), 1 }, prefix + "Mute", false));
         group->addChild (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { padId (p, "solo"), 1 }, prefix + "Solo", false));
+        group->addChild (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { padId (p, "mono"), 1 }, prefix + "Mono", true));
         layout.add (std::move (group));
     }
     return layout;
@@ -257,6 +258,8 @@ inline juce::String tr (Lang lang, const char* key)
         { "gateTip",      "On: the sound stops when the note is released. Off: it always plays to its end", "Encendido: el sonido se corta al soltar la nota. Apagado: siempre suena hasta el final" },
         { "mute",         "Mute",                             "Silencio" },
         { "solo",         "Solo",                             "Solo" },
+        { "mono",         "Mono",                             "Mono" },
+        { "monoTip",      "On: a new hit cuts the one still sounding, as in Sitala. Off: the hits overlap", "Encendido: un golpe nuevo corta al que todavía suena, como en Sitala. Apagado: los golpes se superponen" },
         { "choke",        "Choke",                            "Corte" },
         { "chokeTip",     "Pads in the same group cut each other off, as a closed hi-hat cuts the open one", "Los pads del mismo grupo se cortan entre sí, como el hi-hat cerrado corta al abierto" },
         { "off",          "Off",                              "No" },

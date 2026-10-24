@@ -35,6 +35,7 @@ struct PadParams
     float start  = 0.0f;     // % of the sound
     float end    = 100.0f;   // % of the sound
     bool gate = false, mute = false, solo = false;
+    bool mono = true;        // a new hit cuts the one still sounding (off: they overlap)
 };
 
 // Settings of a pad that belong to the kit (stored with the session).
@@ -466,6 +467,11 @@ private:
         if (rt.choke > 0)
             for (auto& v : voices)
                 if (v.active && v.pad != pad && routing[(size_t) v.pad].choke == rt.choke) v.stop (0.008f);
+
+        // mono: the new hit cuts the one still sounding, with a fade too short to hear as one
+        if (params.pads[(size_t) pad].mono)
+            for (auto& v : voices)
+                if (v.active && v.pad == pad) v.stop (0.004f);
 
         // too many hits of this pad: the oldest fades quickly
         int count = 0;

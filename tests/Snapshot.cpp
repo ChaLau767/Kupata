@@ -240,6 +240,7 @@ int main (int argc, char** argv)
         check (b.padInfo (0).factory == 0 && b.padInfo (0).loaded(), "factory pads restored");
         check (! b.padInfo (9).loaded(), "the cleared pad stays empty");
         check (b.padInfo (2).routing.choke == 1 && b.padInfo (3).routing.choke == 1, "the hats keep their choke group");
+        check (b.padParams (0).mono && ! b.padParams (4).mono, "pads cut themselves, except the cymbal");
         check (b.padInfo (8).routing.note == 64 && b.padInfo (11).routing.note == 39, "the kit's notes are Sitala's (low conga 64, clap 39)");
         check (b.padInfo (8).factory == 15 && b.padInfo (8).loaded(), "a factory sound outside the kit (the sub kick) is restored");
 

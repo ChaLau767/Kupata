@@ -12,7 +12,7 @@ namespace
 {
     constexpr double maxSeconds = 60.0;        // longer files are cut
     constexpr double embedSeconds = 12.0;      // sounds up to this long travel inside the session
-    const char* const paramBases[] { "shape", "tune", "tone", "comp", "volume", "pan", "start", "end", "gate", "mute", "solo" };
+    const char* const paramBases[] { "shape", "tune", "tone", "comp", "volume", "pan", "start", "end", "gate", "mute", "solo", "mono" };
 
     const void* factoryData (int index, int& size)
     {
@@ -49,7 +49,7 @@ KupataProcessor::KupataProcessor()
     {
         auto q = [&] (const char* b) { return r (padId (p, b)); };
         padRefs[(size_t) p] = { q ("shape"), q ("tune"), q ("tone"), q ("comp"), q ("volume"), q ("pan"), q ("start"), q ("end"),
-                                q ("gate"), q ("mute"), q ("solo") };
+                                q ("gate"), q ("mute"), q ("solo"), q ("mono") };
     }
     if (! apvts.state.hasProperty ("lang")) apvts.state.setProperty ("lang", 0, nullptr);
     loadFactoryKit();
@@ -89,6 +89,7 @@ Params KupataProcessor::readParams() const noexcept
         o.shape = R.shape->load(); o.tune = R.tune->load(); o.tone = R.tone->load(); o.comp = R.comp->load();
         o.volume = R.volume->load(); o.pan = R.pan->load(); o.start = R.start->load(); o.end = R.end->load();
         o.gate = R.gate->load() > 0.5f; o.mute = R.mute->load() > 0.5f; o.solo = R.solo->load() > 0.5f;
+        o.mono = R.mono->load() > 0.5f;
     }
     return p;
 }
@@ -276,6 +277,7 @@ void KupataProcessor::loadFactoryKit()
     {
         loadFactory (p, factoryLayout (p));
         resetKnobs (p);
+        if (factoryLayout (p) == 8) setParam (padId (p, "mono"), 0.0f);   // the cymbal rings over itself, as in Sitala
         PadRouting r;
         r.note = presetNote (2, p);   // the kit's own notes (General MIDI, as in Sitala)
         r.choke = factorySounds()[(size_t) factoryLayout (p)].choke;

@@ -1108,7 +1108,7 @@ Content::Content (KupataProcessor& p)
         return noteName (juce::roundToInt (69.0f + 12.0f * std::log2 (hz / 440.0f)), lang);
     };
 
-    for (auto* b : { &gateButton, &muteButton, &soloButton })
+    for (auto* b : { &gateButton, &muteButton, &soloButton, &monoButton })
     {
         addAndMakeVisible (*b);
         b->setClickingTogglesState (true);
@@ -1194,6 +1194,8 @@ void Content::updateTexts()
     gateButton.setTooltip (tr (lang, "gateTip"));
     muteButton.setButtonText (tr (lang, "mute"));
     soloButton.setButtonText (tr (lang, "solo"));
+    monoButton.setButtonText (tr (lang, "mono"));
+    monoButton.setTooltip (tr (lang, "monoTip"));
     chokeBox.setTooltip (tr (lang, "chokeTip"));
     outBox.setTooltip (tr (lang, "outTip"));
     stereoSwitch.setLabels ({ tr (lang, "monoShort"), tr (lang, "stereoShort") });
@@ -1227,6 +1229,8 @@ void Content::attachPad (int pad)
     gateAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, padId (pad, "gate"), gateButton);
     muteAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, padId (pad, "mute"), muteButton);
     soloAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, padId (pad, "solo"), soloButton);
+    monoAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, padId (pad, "mono"), monoButton);
+    monoButton.getProperties().set ("lit", (juce::int64) colours::row (pad).getARGB());
     gateButton.getProperties().set ("lit", (juce::int64) colours::row (pad).getARGB());
 }
 
@@ -1455,10 +1459,11 @@ void Content::resized()
         knobs[i]->setBounds (kx[i % 3], 342 + (i / 3) * (Knob::height + 6), Knob::width, Knob::height);
 
     const int ty = 342 + 2 * (Knob::height + 6) + 8;
-    const int bw = 74;
+    const int bw = 62;
     gateButton.setBounds (px, ty, bw, 30);
     muteButton.setBounds (px + bw + 8, ty, bw, 30);
     soloButton.setBounds (px + 2 * (bw + 8), ty, bw, 30);
+    monoButton.setBounds (px + 3 * (bw + 8), ty, bw, 30);
     chokeBox.setBounds (px + pw - 84, ty, 84, 30);
 
     const int ry = ty + 42;
