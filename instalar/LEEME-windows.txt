@@ -32,9 +32,13 @@ Primeros pasos
     propia automatización.
 
 Salidas separadas (hasta 64 canales)
-  Poné «Track channels» de la pista en la cantidad que quieras, tocá
-  «Multisalida» y cada pad sale por su propio par (1-2, 3-4…). También podés
-  elegir el canal de cada pad en «Salida», en par (EST) o en un canal (M).
+  En Reaper, con el VST3: al insertar Kupata en una pista nueva, Reaper
+  ofrece construir el ruteo de salidas múltiples. Si aceptás, cada pad sale
+  por su propia pista, con su nombre. Para hacerlo después: «Multisalida» >
+  «Crear una pista por pad en REAPER» (se deshace con un solo Ctrl+Z).
+  A mano: poné «Track channels» de la pista en la cantidad que quieras,
+  tocá «Multisalida» y cada pad sale por su propio par (1-2, 3-4…). También
+  podés elegir el canal de cada pad en «Salida», en par (EST) o en un canal (M).
 
 Kits
   «Kit» guarda y carga kits enteros: los sonidos y todas las perillas.

@@ -8,8 +8,9 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include "KupataEngine.h"
 #include "Parameters.h"
+#include "ReaperLink.h"
 
-class KupataProcessor : public juce::AudioProcessor
+class KupataProcessor : public juce::AudioProcessor, private juce::Timer
 {
 public:
     KupataProcessor();
@@ -63,7 +64,7 @@ public:
     int  hitsToPads (int pad);                     // returns how many pads were filled
     void setRouting (int pad, const kupata::PadRouting&);
     void setNotePreset (int preset);               // 0 chromatic, 1 white keys, 2 General MIDI
-    void setMultiOut (bool on);
+    void setMultiOut (bool on, int channels = -1);   // channels: how many the track has (-1: as now)
     void resetKnobs (int pad);
     juce::String padName (int pad, kupata::Lang) const;
 
@@ -93,7 +94,18 @@ public:
 
     bool readTelemetry (kupata::Telemetry& dest);
     int getVersion() const { return version.load(); }
-    int numOutputs() const { return getTotalNumOutputChannels(); }
+    // the channels Kupata can really use: those of the plugin, and in REAPER no more than the track has
+    int numOutputs() const
+    {
+        const int plugin = getTotalNumOutputChannels(), track = reaperChannels.load();
+        return track > 0 ? juce::jmax (1, juce::jmin (plugin, track)) : plugin;
+    }
+
+    // REAPER (VST3): see ReaperLink.h
+    bool reaperAvailable() const { return reaper.available(); }
+    bool reaperRouted() const { return reaperHasRoutes.load(); }
+    int  buildReaperTracks();
+    juce::VST3ClientExtensions* getVST3ClientExtensions() override { return &reaper; }
 
     juce::AudioProcessorValueTreeState apvts;
     juce::AudioFormatManager formats;
@@ -135,6 +147,12 @@ private:
     std::atomic<int> version { 0 };
 
     std::array<kupata::Event, 1024> events {};
+    void timerCallback() override;
+    void syncReaper();
+    ReaperLink reaper;
+    std::atomic<int> reaperChannels { 0 };
+    std::atomic<bool> reaperHasRoutes { false };
+
     kupata::Telemetry telemetry;
     juce::SpinLock telemetryLock;
     int samplesSinceTelemetry = 0;

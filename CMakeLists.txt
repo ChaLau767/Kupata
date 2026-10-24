@@ -62,7 +62,12 @@ juce_add_binary_data(KupataData
 
 target_sources(Kupata PRIVATE
     Source/PluginProcessor.cpp
-    Source/PluginEditor.cpp)
+    Source/PluginEditor.cpp
+    Source/ReaperLink.cpp)
+
+# the VST3 SDK's basic interface, to talk to REAPER (only headers: nothing else of the SDK is built here)
+set(KUPATA_VST3_SDK ${juce_SOURCE_DIR}/modules/juce_audio_processors/format_types/VST3_SDK)
+target_include_directories(Kupata PRIVATE ${KUPATA_VST3_SDK})
 
 target_compile_definitions(Kupata PUBLIC
     JUCE_WEB_BROWSER=0
@@ -90,8 +95,8 @@ add_test(NAME motor COMMAND kupata_engine_test)
 option(KUPATA_SNAPSHOT "Compilar la herramienta de captura y la prueba de anfitrión" OFF)
 if(KUPATA_SNAPSHOT)
     juce_add_console_app(kupata_snapshot PRODUCT_NAME "kupata_snapshot")
-    target_sources(kupata_snapshot PRIVATE tests/Snapshot.cpp Source/PluginProcessor.cpp Source/PluginEditor.cpp)
-    target_include_directories(kupata_snapshot PRIVATE Source)
+    target_sources(kupata_snapshot PRIVATE tests/Snapshot.cpp Source/PluginProcessor.cpp Source/PluginEditor.cpp Source/ReaperLink.cpp)
+    target_include_directories(kupata_snapshot PRIVATE Source ${KUPATA_VST3_SDK})
     target_compile_definitions(kupata_snapshot PRIVATE
         JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JucePlugin_VersionString="0.1.0" JUCE_STANDALONE_APPLICATION=1 JUCE_MODAL_LOOPS_PERMITTED=1)
     target_link_libraries(kupata_snapshot PRIVATE KupataData juce::juce_audio_utils juce::juce_audio_formats juce::juce_recommended_config_flags)

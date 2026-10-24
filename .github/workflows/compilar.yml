@@ -61,7 +61,7 @@ jobs:
       - name: Probar el motor
         run: ctest --test-dir build -C Release --output-on-failure
 
-      - name: Probar el plugin como lo carga un DAW, la reproducción y las sesiones
+      - name: Probar el plugin como lo carga un DAW, la reproducción, las sesiones y REAPER
         run: |
           BIN=build/kupata_hosttest_artefacts/Release
           SNAP=build/kupata_snapshot_artefacts/Release
@@ -69,6 +69,7 @@ jobs:
           "$BIN/kupata_hosttest$EXT" "build/Kupata_artefacts/Release/VST3/Kupata.vst3"
           "$SNAP/kupata_snapshot$EXT" --play
           "$SNAP/kupata_snapshot$EXT" --state
+          "$SNAP/kupata_snapshot$EXT" --reaper
 
       - name: Validar el plugin con pluginval
         run: |

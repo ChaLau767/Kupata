@@ -26,9 +26,15 @@ namespace
     }
 }
 
+// One output bus with as many channels as the track has (up to 64). Stereo by default, except as a
+// VST3 in REAPER: there it starts with 32 channels, a pair per pad, so that REAPER offers to build
+// the multi-output routing when it is inserted on a new track.
 juce::AudioProcessor::BusesProperties KupataProcessor::buses()
 {
-    return BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true);
+    const bool reaperVst3 = juce::PluginHostType::getPluginLoadedAs() == juce::AudioProcessor::wrapperType_VST3
+                            && juce::PluginHostType().isReaper();
+    return BusesProperties().withOutput ("Output", reaperVst3 ? juce::AudioChannelSet::discreteChannels (numPads * 2)
+                                                              : juce::AudioChannelSet::stereo(), true);
 }
 
 KupataProcessor::KupataProcessor()
@@ -47,10 +53,12 @@ KupataProcessor::KupataProcessor()
     }
     if (! apvts.state.hasProperty ("lang")) apvts.state.setProperty ("lang", 0, nullptr);
     loadFactoryKit();
+    startTimer (500);
 }
 
 KupataProcessor::~KupataProcessor()
 {
+    stopTimer();
     const juce::SpinLock::ScopedLockType lock (engineLock);
     engine.setPreview (nullptr);
 }
@@ -94,7 +102,8 @@ void KupataProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 {
     juce::ScopedNoDenormals noDenormals;
     const int n = buffer.getNumSamples();
-    const int numOut = juce::jmin (getTotalNumOutputChannels(), buffer.getNumChannels(), maxOutputs);
+    // in REAPER, channels beyond the track's are dropped: count only those it has
+    const int numOut = juce::jmin (numOutputs(), buffer.getNumChannels(), maxOutputs);
 
     int numEvents = 0;
     auto add = [&] (const Event& e) { if (numEvents < (int) events.size()) events[(size_t) numEvents++] = e; };
@@ -368,9 +377,9 @@ void KupataProcessor::setNotePreset (int preset)
     }
 }
 
-void KupataProcessor::setMultiOut (bool on)
+void KupataProcessor::setMultiOut (bool on, int channels)
 {
-    const int outs = numOutputs();
+    const int outs = channels > 0 ? channels : numOutputs();
     for (int p = 0; p < numPads; ++p)
     {
         auto r = padInfo (p).routing;
@@ -663,6 +672,83 @@ bool KupataProcessor::loadKit (const juce::File& file)
     apvts.state.setProperty ("kitName", name.isNotEmpty() ? name : file.getFileNameWithoutExtension(), nullptr);
     ++version;
     return true;
+}
+
+//==============================================================================
+void KupataProcessor::timerCallback()
+{
+    if (reaper.available()) syncReaper();
+}
+
+void KupataProcessor::syncReaper()
+{
+    const int channels = reaper.trackChannels();
+    if (channels != reaperChannels.load()) { reaperChannels = channels; ++version; }
+    const auto routes = reaper.routes();
+    bool multi = false;   // something receives from channel 3 on: there is multi-output routing
+    for (const auto& r : routes) multi = multi || r.channel >= 2;
+    reaperHasRoutes = multi;
+    if (! multi) return;
+
+    // REAPER has built multi-output routing: the first time, each pad goes to its own pair
+    if (! (bool) apvts.state.getProperty ("reaperMultiOut", false))
+    {
+        apvts.state.setProperty ("reaperMultiOut", true, nullptr);
+        bool allOnFirstPair = true;
+        for (int p = 0; p < numPads; ++p)
+        {
+            const auto r = padInfo (p).routing;
+            allOnFirstPair = allOnFirstPair && r.out == 0 && r.stereo;
+        }
+        if (allOnFirstPair) setMultiOut (true, channels);
+    }
+
+    // the tracks that receive a pad take its name, and keep it in step
+    const auto lang = getLanguage();
+    for (const auto& route : routes)
+    {
+        int pad = -1;
+        for (int p = 0; p < numPads && pad < 0; ++p)
+            if (padInfo (p).routing.out == route.channel) pad = p;
+        if (pad < 0) continue;
+        auto wanted = padName (pad, lang);
+        if (wanted.isEmpty()) wanted = "Pad " + juce::String (pad + 1);
+        const auto name = reaper.trackName (route.track);
+        const auto mark = reaper.trackMark (route.track);
+        const bool ours = mark.isNotEmpty() && name == mark;   // named by Kupata and not renamed since
+        // made by REAPER's routing: no name, or one taken from Kupata's outputs. On 1-2, where an
+        // ordinary send (to a reverb, say) also starts, only a name that says Kupata
+        const bool fresh = mark.isEmpty() && (name.containsIgnoreCase ("kupata")
+                                              || (route.channel >= 2 && name.containsOnly ("0123456789/ -:()")));
+        if ((ours || fresh) && name != wanted)
+        {
+            reaper.setTrackName (route.track, wanted);
+            reaper.setTrackMark (route.track, wanted);
+        }
+        else if (fresh) reaper.setTrackMark (route.track, wanted);
+    }
+}
+
+int KupataProcessor::buildReaperTracks()
+{
+    if (! reaper.available() || reaperHasRoutes.load()) return 0;
+    const auto lang = getLanguage();
+    juce::StringArray names;
+    for (int p = 0; p < numPads; ++p)
+    {
+        auto n = padName (p, lang);
+        names.add (n.isNotEmpty() ? n : "Pad " + juce::String (p + 1));
+    }
+    const int made = reaper.buildRouting (names, lang == Lang::es ? "Kupata: una pista por pad" : "Kupata: a track per pad");
+    if (made > 0)
+    {
+        apvts.state.setProperty ("reaperMultiOut", true, nullptr);
+        reaperChannels = made * 2;
+        setMultiOut (true, made * 2);
+        reaperHasRoutes = true;
+        ++version;
+    }
+    return made;
 }
 
 juce::AudioProcessorEditor* KupataProcessor::createEditor() { return new KupataEditor (*this); }

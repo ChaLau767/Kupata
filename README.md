@@ -40,7 +40,18 @@ Todas son parámetros del DAW, con su propia automatización: «P1 Shape», «P1
 
 ## Salidas separadas
 
-Kupata usa tantos canales como tenga la pista, hasta 64; el encabezado muestra cuántos. En Reaper, poné «Track channels» de la pista en la cantidad que quieras y tocá **Multisalida**: cada pad sale por su propio par (pad 1 por 1-2, pad 2 por 3-4…). También podés elegir el canal de cada pad en **Salida**, en un par (**EST**) o en un canal solo (**M**). Si un pad apunta a un canal que la pista no tiene, suena por 1-2.
+Kupata usa tantos canales como tenga la pista, hasta 64; el encabezado muestra cuántos. Con **Multisalida**, cada pad sale por su propio par (pad 1 por 1-2, pad 2 por 3-4…). También podés elegir el canal de cada pad en **Salida**, en un par (**EST**) o en un canal solo (**M**). Si un pad apunta a un canal que la pista no tiene, suena por 1-2.
+
+### En REAPER
+
+Como VST3, Kupata se entiende con REAPER:
+
+- **Al insertarlo en una pista nueva** («Insertar instrumento virtual en pista nueva»), Kupata se presenta con 32 salidas, un par por pad, y REAPER ofrece construir el ruteo de salidas múltiples. Si aceptás, Kupata lo nota, manda cada pad a su par y les pone a las pistas nuevas el nombre de los pads.
+- **Para hacerlo después**, en una pista que ya tiene Kupata: **Multisalida → Crear una pista por pad en REAPER**. Kupata le da 32 canales a su pista, crea debajo una carpeta con dieciséis pistas (una por pad, con su nombre, cada una recibiendo su par) y apaga el envío de la pista de Kupata al master, para que nada suene dos veces. Se deshace en un solo paso con Ctrl+Z / Cmd+Z.
+- **Los nombres siguen a los pads**: si cambiás el sonido de un pad, o el idioma, su pista cambia de nombre. Si renombraste una pista a mano, Kupata la deja como está.
+- Kupata sabe cuántos canales tiene de verdad la pista, así que un pad que apunta a un canal que no existe se oye por 1-2 en lugar de quedar mudo.
+
+Esto funciona con el VST3. Con el CLAP o el AU, Multisalida funciona igual, pero las pistas se arman a mano: poné «Track channels» de la pista en la cantidad que quieras y mandá esos canales a otras pistas desde el botón de enrutamiento.
 
 ## Sesiones
 
@@ -60,8 +71,8 @@ cmake --build build --config Release
 ctest --test-dir build -C Release
 ```
 
-Con `-DKUPATA_SNAPSHOT=ON` se compilan además una prueba que carga el VST3 como un DAW y una herramienta que guarda una captura de la interfaz (`kupata_snapshot captura.png es`), prueba la reproducción (`--play`), las sesiones y los kits (`--state`), o graba un patrón de prueba con el kit (`--demo demo.wav`).
+Con `-DKUPATA_SNAPSHOT=ON` se compilan además una prueba que carga el VST3 como un DAW y una herramienta que guarda una captura de la interfaz (`kupata_snapshot captura.png es`), prueba la reproducción (`--play`), las sesiones y los kits (`--state`), el trabajo con REAPER sobre una imitación de su API (`--reaper`), o graba un patrón de prueba con el kit (`--demo demo.wav`).
 
 ## Licencia
 
-GNU AGPL 3.0 o posterior. Usa [JUCE](https://juce.com) (AGPL), las fuentes Archivo e IBM Plex Mono (SIL Open Font License, en `Resources/fonts`) y [clap-juce-extensions](https://github.com/free-audio/clap-juce-extensions). Los sonidos del kit analógico (`Resources/kit`) se pueden usar en cualquier obra, sin atribución.
+GNU AGPL 3.0 o posterior. Usa [JUCE](https://juce.com) (AGPL), las fuentes Archivo e IBM Plex Mono (SIL Open Font License, en `Resources/fonts`), [clap-juce-extensions](https://github.com/free-audio/clap-juce-extensions) y la interfaz de extensiones de REAPER de Cockos ([reaper-sdk](https://github.com/justinfrankel/reaper-sdk), licencia zlib). Los sonidos del kit analógico (`Resources/kit`) se pueden usar en cualquier obra, sin atribución.

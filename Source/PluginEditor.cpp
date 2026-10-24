@@ -1050,12 +1050,19 @@ Content::Content (KupataProcessor& p)
     addAndMakeVisible (multiOutButton);
     multiOutButton.onClick = [this] {
         juce::PopupMenu m;
+        if (processor.reaperAvailable())
+        {
+            m.addItem (3, processor.reaperRouted() ? tr (lang, "reaperDone") : tr (lang, "reaperBuild"), ! processor.reaperRouted());
+            m.addSeparator();
+        }
         m.addItem (1, tr (lang, "multiOut"), processor.numOutputs() >= 4);
         m.addItem (2, tr (lang, "allTo12"));
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&multiOutButton), [this] (int r) {
             if (r == 1) processor.setMultiOut (true);
             if (r == 2) processor.setMultiOut (false);
+            if (r == 3 && processor.buildReaperTracks() == 0) { message = tr (lang, "reaperFailed"); messageTicks = 150; repaint(); }
             fillOutputs();
+            pads.repaint();
         });
     };
 
@@ -1178,7 +1185,7 @@ void Content::updateTexts()
     notesButton.setButtonText (tr (lang, "notes"));
     notesButton.setTooltip (tr (lang, "notesTip"));
     multiOutButton.setButtonText (tr (lang, "multiOut"));
-    multiOutButton.setTooltip (tr (lang, "multiOutTip"));
+    multiOutButton.setTooltip (tr (lang, processor.reaperAvailable() ? "multiOutReaperTip" : "multiOutTip"));
     output.label = u8 (lang == Lang::es ? "Salida" : "Output");
     output.setTooltip (u8 (lang == Lang::es ? spec ("gain").noteEs : spec ("gain").noteEn));
     velocity.label = u8 (lang == Lang::es ? "Velocidad" : "Velocity");

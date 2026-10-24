@@ -41,6 +41,105 @@ static juce::File writeTestFile (const juce::String& name, int hits, double seco
     return f;
 }
 
+//==============================================================================
+// A small imitation of REAPER's extension API: a project with tracks, names, channels and sends.
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wshadow", "-Wnon-virtual-dtor", "-Wshadow-field-in-constructor", "-Wzero-as-null-pointer-constant", "-Wunused-parameter")
+#include <pluginterfaces/base/funknown.h>
+namespace fake
+{
+    struct Send { int src = 0, dst = 0, mode = 0, midi = 0; void* dest = nullptr; };
+    struct Track { std::string name, mark; int nchan = 2, folder = 0; bool mainSend = true; std::vector<Send> sends; };
+    std::vector<std::unique_ptr<Track>> tracks;
+    int undoBlocks = 0;
+
+    int indexOf (void* t) { for (size_t i = 0; i < tracks.size(); ++i) if (tracks[i].get() == t) return (int) i; return -1; }
+    Track& T (void* t) { return *static_cast<Track*> (t); }
+
+    double getVal (void* t, const char* p)
+    {
+        const std::string k (p);
+        if (k == "I_NCHAN") return T (t).nchan;
+        if (k == "I_FOLDERDEPTH") return T (t).folder;
+        if (k == "B_MAINSEND") return T (t).mainSend ? 1 : 0;
+        if (k == "IP_TRACKNUMBER") return indexOf (t) + 1;
+        return 0;
+    }
+    bool setVal (void* t, const char* p, double v)
+    {
+        const std::string k (p);
+        if (k == "I_NCHAN") T (t).nchan = (int) v;
+        else if (k == "I_FOLDERDEPTH") T (t).folder = (int) v;
+        else if (k == "B_MAINSEND") T (t).mainSend = v != 0;
+        return true;
+    }
+    bool str (void* t, const char* p, char* buf, bool set)
+    {
+        std::string& f = std::string (p) == "P_NAME" ? T (t).name : T (t).mark;
+        if (set) f = buf; else std::snprintf (buf, 1024, "%s", f.c_str());
+        return true;
+    }
+    int numSends (void* t, int cat) { return cat == 0 ? (int) T (t).sends.size() : 0; }
+    double sendVal (void* t, int, int i, const char* p)
+    {
+        const auto& s = T (t).sends[(size_t) i];
+        const std::string k (p);
+        return k == "I_SRCCHAN" ? s.src : k == "I_DSTCHAN" ? s.dst : k == "I_SENDMODE" ? s.mode : k == "I_MIDIFLAGS" ? s.midi : 0;
+    }
+    bool setSendVal (void* t, int, int i, const char* p, double v)
+    {
+        auto& s = T (t).sends[(size_t) i];
+        const std::string k (p);
+        if (k == "I_SRCCHAN") s.src = (int) v; else if (k == "I_DSTCHAN") s.dst = (int) v;
+        else if (k == "I_SENDMODE") s.mode = (int) v; else if (k == "I_MIDIFLAGS") s.midi = (int) v;
+        return true;
+    }
+    void* sendInfo (void* t, int, int i, const char* p, void*) { return std::string (p) == "P_DESTTRACK" ? T (t).sends[(size_t) i].dest : nullptr; }
+    void insert (int idx, bool) { tracks.insert (tracks.begin() + idx, std::make_unique<Track>()); }
+    void* getTrack (void*, int i) { return i >= 0 && i < (int) tracks.size() ? tracks[(size_t) i].get() : nullptr; }
+    int createSend (void* t, void* d) { T (t).sends.push_back ({ 0, 0, 0, 0, d }); return (int) T (t).sends.size() - 1; }
+    void undoBegin (void*) { ++undoBlocks; }
+    void undoEnd (void*, const char*, int) {}
+    void adjust (bool) {}
+    void update() {}
+
+    struct Host : public Steinberg::FUnknown
+    {
+        void* parent = nullptr;
+        Steinberg::tresult PLUGIN_API queryInterface (const Steinberg::TUID iid, void** obj) override
+        {
+            const Steinberg::TUID reaper = INLINE_UID (0x79655E36, 0x77EE4267, 0xA573FEF7, 0x4912C27C);
+            if (std::memcmp (iid, reaper, sizeof (Steinberg::TUID)) == 0) { *obj = this; return Steinberg::kResultOk; }
+            *obj = nullptr; return Steinberg::kNoInterface;
+        }
+        Steinberg::uint32 PLUGIN_API addRef() override { return 1; }
+        Steinberg::uint32 PLUGIN_API release() override { return 1; }
+        virtual void* PLUGIN_API getReaperApi (const char* n)
+        {
+            const std::string k (n);
+            if (k == "GetMediaTrackInfo_Value") return (void*) &getVal;
+            if (k == "SetMediaTrackInfo_Value") return (void*) &setVal;
+            if (k == "GetSetMediaTrackInfo_String") return (void*) &str;
+            if (k == "GetTrackNumSends") return (void*) &numSends;
+            if (k == "GetTrackSendInfo_Value") return (void*) &sendVal;
+            if (k == "SetTrackSendInfo_Value") return (void*) &setSendVal;
+            if (k == "GetSetTrackSendInfo") return (void*) &sendInfo;
+            if (k == "InsertTrackAtIndex") return (void*) &insert;
+            if (k == "GetTrack") return (void*) &getTrack;
+            if (k == "CreateTrackSend") return (void*) &createSend;
+            if (k == "Undo_BeginBlock2") return (void*) &undoBegin;
+            if (k == "Undo_EndBlock2") return (void*) &undoEnd;
+            if (k == "TrackList_AdjustWindows") return (void*) &adjust;
+            if (k == "UpdateArrange") return (void*) &update;
+            return nullptr;
+        }
+        virtual void* PLUGIN_API getReaperParent (Steinberg::uint32 w) { return w == 1 ? parent : nullptr; }
+        virtual void* PLUGIN_API reaperExtended (Steinberg::uint32, void*, void*, void*) { return nullptr; }
+    };
+}
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+
+static void wait (int ms) { juce::MessageManager::getInstance()->runDispatchLoopUntil (ms); }
+
 static void run (KupataProcessor& proc, int blocks, std::vector<std::pair<int, int>> notes = {})
 {
     juce::AudioBuffer<float> buf (2, 512);
@@ -162,6 +261,79 @@ int main (int argc, char** argv)
         d.setHit (11, 0);
         check (d.hitsToPads (11) == 4 && d.padInfo (14).hit == 4, "hits to pads: four pads filled");
         std::printf (failures == 0 ? "\nall state tests passed\n" : "\n%d state tests failed\n", failures);
+        return failures == 0 ? 0 : 1;
+    }
+
+    if (mode == "--reaper")
+    {
+        // 1. Kupata builds the routing itself: a folder with one track per pad
+        fake::tracks.clear();
+        fake::insert (0, true); fake::tracks[0]->name = "Bass";
+        fake::insert (1, true); fake::tracks[1]->name = "Drums";
+        fake::insert (2, true); fake::tracks[2]->name = "Vox";
+        fake::Host host;
+        host.parent = fake::tracks[1].get();
+        auto* drums = fake::tracks[1].get();
+        {
+            KupataProcessor proc;
+            proc.setPlayConfigDetails (0, 32, 48000.0, 512);
+            proc.prepareToPlay (48000.0, 512);
+            check (! proc.reaperAvailable(), "without REAPER the link is off");
+            proc.getVST3ClientExtensions()->setIHostApplication (&host);
+            check (proc.reaperAvailable(), "REAPER's API is found");
+            wait (700);
+            check (proc.numOutputs() == 2, "the track's 2 channels count, not the plugin's 32 (" + juce::String (proc.numOutputs()) + ")");
+            const int made = proc.buildReaperTracks();
+            check (made == 16 && fake::tracks.size() == 19, "16 tracks created (" + juce::String (made) + ")");
+            check (fake::tracks[2]->name == "Kick long" && fake::tracks[17]->name == "Sub kick" && fake::tracks[18]->name == "Vox",
+                   "named after the pads, right under Kupata's track");
+            check (drums->nchan == 32 && ! drums->mainSend && drums->folder == 1 && fake::tracks[17]->folder == -1, "32 channels, a folder, no double sound");
+            bool sends = drums->sends.size() == 16;
+            for (int k = 0; k < 16 && sends; ++k)
+                sends = drums->sends[(size_t) k].src == k * 2 && drums->sends[(size_t) k].dest == fake::tracks[(size_t) k + 2].get() && drums->sends[(size_t) k].midi == 31;
+            check (sends, "track k receives channels 2k-1, 2k, audio only");
+            check (proc.padInfo (4).routing.out == 8 && proc.padInfo (15).routing.out == 30, "each pad on its own pair");
+            check (fake::undoBlocks == 1, "one undo step");
+            check (proc.buildReaperTracks() == 0, "it is not built twice");
+
+            // the names follow the pads, unless the person renamed the track
+            fake::tracks[5]->name = "Mi tambor";   // pad 4
+            proc.loadFactory (2, 4);                // pad 3 now holds the clap
+            proc.loadFactory (3, 5);                // pad 4 the rimshot
+            wait (1200);
+            check (fake::tracks[4]->name == "Clap", "a pad's new sound renames its track (" + juce::String (fake::tracks[4]->name) + ")");
+            check (fake::tracks[5]->name == "Mi tambor", "a track the person renamed keeps its name");
+            proc.setLanguage (kupata::Lang::es);
+            wait (1200);
+            check (fake::tracks[2]->name == "Bombo largo", "the names follow the interface's language");
+        }
+
+        // 2. REAPER built the routing (its dialog): Kupata notices, spreads the pads and names the tracks
+        fake::tracks.clear();
+        fake::insert (0, true);
+        fake::tracks[0]->name = "Kupata";
+        fake::tracks[0]->nchan = 32;
+        for (int k = 0; k < 16; ++k)
+        {
+            fake::insert (k + 1, true);
+            fake::tracks[(size_t) k + 1]->name = (k == 15 ? "Reverb" : "Kupata " + std::to_string (2 * k + 1) + "/" + std::to_string (2 * k + 2));
+            fake::createSend (fake::tracks[0].get(), fake::tracks[(size_t) k + 1].get());
+            fake::tracks[0]->sends.back().src = 2 * k;
+        }
+        host.parent = fake::tracks[0].get();
+        {
+            KupataProcessor proc;
+            proc.setPlayConfigDetails (0, 32, 48000.0, 512);
+            proc.getVST3ClientExtensions()->setIHostApplication (&host);
+            wait (1200);
+            check (proc.reaperRouted() && proc.padInfo (6).routing.out == 12, "REAPER's own routing turns multi-out on");
+            check (fake::tracks[1]->name == "Kick long" && fake::tracks[7]->name == "Closed hat", "REAPER's tracks take the pads' names");
+            check (fake::tracks[16]->name == "Reverb", "a track with a name of its own is left alone");
+            proc.setMultiOut (false);
+            wait (1200);
+            check (proc.padInfo (6).routing.out == 0, "turning multi-out off sticks (it is only done once)");
+        }
+        std::printf (failures == 0 ? "\nall REAPER tests passed\n" : "\n%d REAPER tests failed\n", failures);
         return failures == 0 ? 0 : 1;
     }
 
