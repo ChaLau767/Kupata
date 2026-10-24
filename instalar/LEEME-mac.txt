@@ -1,0 +1,47 @@
+KUPATA — sampler de percusión
+Instalación en macOS (Apple Silicon e Intel, macOS 11 o posterior)
+
+1. Descomprimí este paquete (si estás leyendo esto, ya lo hiciste).
+
+2. Abrí la aplicación Terminal (está en Aplicaciones > Utilidades).
+
+3. Escribí  bash  seguido de un espacio, arrastrá el archivo
+   Instalar-Kupata.command a la ventana de la Terminal y apretá Enter.
+
+   (Se usa la Terminal porque el instalador no está firmado por Apple:
+   si le hacés doble clic, macOS lo bloquea.)
+
+4. En Reaper: Preferencias > Plug-ins > VST > «Re-scan».
+   Kupata aparece como instrumento VST3, CLAP y AU, en «Lautaro Martin Vieyra».
+
+Qué se instala
+  Kupata.vst3       ~/Library/Audio/Plug-Ins/VST3
+  Kupata.component  ~/Library/Audio/Plug-Ins/Components   (AU, para Logic y otros)
+  Kupata.clap       ~/Library/Audio/Plug-Ins/CLAP
+  Kupata.app        ~/Applications   (aplicación independiente)
+
+Para desinstalar, borrá esos cuatro archivos.
+
+Primeros pasos
+  - Insertá Kupata como instrumento en una pista: ya trae el kit analógico,
+    dieciséis sonidos sintetizados al estilo de las cajas de ritmo de los 80.
+  - Las notas desde Do2 (C2) tocan los pads 1 a 16. Con «Notas» podés pasar
+    a teclas blancas o al mapa de batería General MIDI.
+  - Hacé clic en un pad para tocarlo y elegirlo; sus seis perillas aparecen
+    a la derecha. Soltá un archivo de audio sobre un pad para cambiar su sonido.
+  - Cada perilla es un parámetro del DAW («P1 Shape», «P3 Tone»…), con su
+    propia automatización.
+
+Salidas separadas (hasta 64 canales)
+  Poné «Track channels» de la pista en la cantidad que quieras, tocá
+  «Multisalida» y cada pad sale por su propio par (1-2, 3-4…). También podés
+  elegir el canal de cada pad en «Salida», en par (EST) o en un canal (M).
+
+Kits
+  «Kit» guarda y carga kits enteros: los sonidos y todas las perillas.
+  Se guardan en Documentos/Kupata/Kits. Los sonidos de hasta 12 segundos
+  viajan dentro de la sesión del DAW, así que no se pierden si movés los archivos.
+
+Código fuente y versiones nuevas: https://github.com/ChaLau767/kupata
+Licencia: GNU AGPL 3.0. Podés usarlo, compartirlo y modificarlo libremente.
+Los sonidos del kit analógico se pueden usar en cualquier música, sin pedir permiso.

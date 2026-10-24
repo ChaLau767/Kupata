@@ -1,0 +1,3 @@
+*.bat text eol=crlf
+instalar/*.txt text eol=crlf
+*.command text eol=lf

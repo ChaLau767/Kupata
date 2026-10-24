@@ -1,0 +1,114 @@
+[
+ {
+  "pad": 1,
+  "file": "01-bombo-largo.flac",
+  "en": "Kick long",
+  "es": "Bombo largo",
+  "choke": 0
+ },
+ {
+  "pad": 2,
+  "file": "02-bombo-corto.flac",
+  "en": "Kick short",
+  "es": "Bombo corto",
+  "choke": 0
+ },
+ {
+  "pad": 3,
+  "file": "03-tambor.flac",
+  "en": "Snare",
+  "es": "Tambor",
+  "choke": 0
+ },
+ {
+  "pad": 4,
+  "file": "04-tambor-brillante.flac",
+  "en": "Snare bright",
+  "es": "Tambor brillante",
+  "choke": 0
+ },
+ {
+  "pad": 5,
+  "file": "05-palmas.flac",
+  "en": "Clap",
+  "es": "Palmas",
+  "choke": 0
+ },
+ {
+  "pad": 6,
+  "file": "06-aro.flac",
+  "en": "Rimshot",
+  "es": "Aro",
+  "choke": 0
+ },
+ {
+  "pad": 7,
+  "file": "07-hihat-cerrado.flac",
+  "en": "Closed hat",
+  "es": "Hihat cerrado",
+  "choke": 1
+ },
+ {
+  "pad": 8,
+  "file": "08-hihat-abierto.flac",
+  "en": "Open hat",
+  "es": "Hihat abierto",
+  "choke": 1
+ },
+ {
+  "pad": 9,
+  "file": "09-platillo.flac",
+  "en": "Cymbal",
+  "es": "Platillo",
+  "choke": 0
+ },
+ {
+  "pad": 10,
+  "file": "10-tom-grave.flac",
+  "en": "Low tom",
+  "es": "Tom grave",
+  "choke": 0
+ },
+ {
+  "pad": 11,
+  "file": "11-tom-medio.flac",
+  "en": "Mid tom",
+  "es": "Tom medio",
+  "choke": 0
+ },
+ {
+  "pad": 12,
+  "file": "12-tom-agudo.flac",
+  "en": "High tom",
+  "es": "Tom agudo",
+  "choke": 0
+ },
+ {
+  "pad": 13,
+  "file": "13-cencerro.flac",
+  "en": "Cowbell",
+  "es": "Cencerro",
+  "choke": 0
+ },
+ {
+  "pad": 14,
+  "file": "14-clave.flac",
+  "en": "Clave",
+  "es": "Clave",
+  "choke": 0
+ },
+ {
+  "pad": 15,
+  "file": "15-maracas.flac",
+  "en": "Maracas",
+  "es": "Maracas",
+  "choke": 0
+ },
+ {
+  "pad": 16,
+  "file": "16-bombo-sub.flac",
+  "en": "Sub kick",
+  "es": "Bombo sub",
+  "choke": 0
+ }
+]

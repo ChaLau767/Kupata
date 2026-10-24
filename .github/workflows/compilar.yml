@@ -1,0 +1,123 @@
+name: Compilar
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*', '[0-9]*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Etiqueta de una Release ya creada a la que adjuntar los paquetes (por ejemplo 0.1.0). Vacío: solo compila.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  compilar:
+    name: ${{ matrix.nombre }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nombre: macOS
+            os: macos-14
+            cmake_args: -DCMAKE_OSX_ARCHITECTURES=arm64;x86_64
+            pluginval: pluginval_macOS.zip
+          - nombre: Windows
+            os: windows-2022
+            cmake_args: ""
+            pluginval: pluginval_Windows.zip
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Reutilizar dependencias descargadas
+        uses: actions/cache@v6
+        with:
+          path: build/_deps
+          key: deps-${{ matrix.os }}-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Configurar
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DKUPATA_SNAPSHOT=ON "${{ matrix.cmake_args }}"
+
+      - name: Compilar
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Probar el motor
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Probar el plugin como lo carga un DAW, la reproducción y las sesiones
+        run: |
+          BIN=build/kupata_hosttest_artefacts/Release
+          SNAP=build/kupata_snapshot_artefacts/Release
+          if [ "$RUNNER_OS" = "Windows" ]; then EXT=.exe; else EXT=; fi
+          "$BIN/kupata_hosttest$EXT" "build/Kupata_artefacts/Release/VST3/Kupata.vst3"
+          "$SNAP/kupata_snapshot$EXT" --play
+          "$SNAP/kupata_snapshot$EXT" --state
+
+      - name: Validar el plugin con pluginval
+        run: |
+          curl -sSL -o pluginval.zip "https://github.com/Tracktion/pluginval/releases/latest/download/${{ matrix.pluginval }}"
+          unzip -q pluginval.zip
+          VST3="build/Kupata_artefacts/Release/VST3/Kupata.vst3"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            ./pluginval.app/Contents/MacOS/pluginval --strictness-level 7 --validate-in-process --validate "$VST3"
+          else
+            ./pluginval.exe --strictness-level 7 --validate-in-process --validate "$VST3"
+          fi
+
+      - name: Empaquetar
+        run: |
+          VERSION=$(grep -oE 'project\(Kupata VERSION [0-9.]+' CMakeLists.txt | grep -oE '[0-9.]+$')
+          ART=build/Kupata_artefacts/Release
+          DIST="Kupata-${VERSION}-${{ matrix.nombre }}"
+          mkdir -p "dist/$DIST"
+          cp -R "$ART/VST3/Kupata.vst3" "$ART/CLAP/Kupata.clap" "dist/$DIST/"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            cp -R "$ART/AU/Kupata.component" "$ART/Standalone/Kupata.app" "dist/$DIST/"
+            # firma ad hoc: sin firma, macOS no carga binarios para Apple Silicon
+            for b in Kupata.vst3 Kupata.clap Kupata.component Kupata.app; do
+              codesign --force --deep --sign - "dist/$DIST/$b"
+            done
+            cp instalar/mac/Instalar-Kupata.command "dist/$DIST/"
+            chmod +x "dist/$DIST/Instalar-Kupata.command"
+            cp instalar/LEEME-mac.txt "dist/$DIST/LEEME.txt"
+            (cd dist && ditto -c -k --keepParent "$DIST" "$DIST.zip")
+          else
+            cp "$ART/Standalone/Kupata.exe" "dist/$DIST/"
+            cp instalar/windows/Instalar-Kupata.bat "dist/$DIST/"
+            cp instalar/LEEME-windows.txt "dist/$DIST/LEEME.txt"
+            (cd dist && 7z a -tzip "$DIST.zip" "$DIST" > /dev/null)
+          fi
+          echo "PAQUETE=dist/$DIST.zip" >> "$GITHUB_ENV"
+
+      - name: Guardar el paquete
+        uses: actions/upload-artifact@v7
+        with:
+          name: Kupata-${{ matrix.nombre }}
+          path: ${{ env.PAQUETE }}
+          compression-level: 0
+
+      - name: Quitar paquetes anteriores de esta Release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.version || github.ref_name }}
+        run: |
+          gh release view "$TAG" --json assets -q '.assets[].name' 2>/dev/null \
+            | grep -- '-${{ matrix.nombre }}\.zip$' \
+            | while read -r name; do gh release delete-asset "$TAG" "$name" -y; done || true
+
+      - name: Publicar en Releases (solo versiones etiquetadas)
+        if: startsWith(github.ref, 'refs/tags/') || inputs.version != ''
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.version || github.ref_name }}
+          files: ${{ env.PAQUETE }}
