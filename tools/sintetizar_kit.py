@@ -143,10 +143,10 @@ def cymbal(seed, seconds=2.6):
     return x
 
 
-def tom(f0, tau, seed, seconds):
-    body = resonator(f0, tau, seconds, 0.12, 0.03)
-    n = bandpass(noise(seconds, seed), f0 * 2.0, f0 * 6.0, 1) * env(seconds, tau * 0.3)
-    return drive(body + 0.12 * n, 1.2)
+def tom(f0, tau, seconds):
+    """Deep toms: a falling resonator, a softer partial a fifth above (the skin), and the stick's click."""
+    body = resonator(f0, tau, seconds, 0.25, 0.06) + 0.18 * resonator(f0 * 1.5, tau * 0.4, seconds, 0.2, 0.04, 0.7)
+    return drive(body + 0.2 * click(seconds, 1800.0, 0.001), 1.3)
 
 
 def cowbell(seconds=0.65):
@@ -176,9 +176,9 @@ KIT = [
     (7,  "hihat-cerrado",  "Closed hat",   "Hihat cerrado",    1, lambda: finish(hat(0.0125, 0.15, 7), -4.0)),
     (8,  "hihat-abierto",  "Open hat",     "Hihat abierto",    1, lambda: finish(hat(0.1, 0.8, 7), -5.0, 0.05)),
     (9,  "platillo",       "Cymbal",       "Platillo",         0, lambda: finish(cymbal(9), -6.0)),
-    (10, "tom-grave",      "Low tom",      "Tom grave",        0, lambda: finish(tom(90.0, 0.16, 10, 1.15), -2.0, 0.03)),
-    (11, "tom-medio",      "Mid tom",      "Tom medio",        0, lambda: finish(tom(130.0, 0.13, 11, 0.95), -2.0, 0.03)),
-    (12, "tom-agudo",      "High tom",     "Tom agudo",        0, lambda: finish(tom(185.0, 0.11, 12, 0.8), -2.0, 0.03)),
+    (10, "tom-grave",      "Low tom",      "Tom grave",        0, lambda: finish(tom(74.0, 0.26, 1.6), -2.0, 0.03)),
+    (11, "tom-medio",      "Mid tom",      "Tom medio",        0, lambda: finish(tom(106.0, 0.21, 1.3), -2.0, 0.03)),
+    (12, "tom-agudo",      "High tom",     "Tom agudo",        0, lambda: finish(tom(150.0, 0.17, 1.1), -2.0, 0.03)),
     (13, "cencerro",       "Cowbell",      "Cencerro",         0, lambda: finish(cowbell(), -4.0, 0.02)),
     (14, "clave",          "Clave",        "Clave",            0, lambda: finish(clave(), -5.0)),
     (15, "maracas",        "Maracas",      "Maracas",          0, lambda: finish(maracas(15), -6.0)),
