@@ -24,9 +24,11 @@ Para desinstalar, borrá esos cuatro archivos.
 
 Primeros pasos
   - Insertá Kupata como instrumento en una pista: ya trae el kit analógico,
-    dieciséis sonidos sintetizados al estilo de las cajas de ritmo de los 80.
-  - Las notas desde Do2 (C2) tocan los pads 1 a 16. Con «Notas» podés pasar
-    a teclas blancas o al mapa de batería General MIDI.
+    dieciséis sonidos sintetizados al estilo de las cajas de ritmo de los 80,
+    entre ellos tres congas.
+  - El kit está ordenado como el kit 808 de Sitala y usa sus mismas notas
+    (General MIDI: bombo en Do2/C2, tambor en Re2…). Con «Notas» podés pasar
+    a cromático desde Do2 o a teclas blancas.
   - Hacé clic en un pad para tocarlo y elegirlo; sus seis perillas aparecen
     a la derecha. Soltá un archivo de audio sobre un pad para cambiar su sonido.
   - Cada perilla es un parámetro del DAW («P1 Shape», «P3 Tone»…), con su

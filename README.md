@@ -2,7 +2,7 @@
 
 **Sampler de percusión de 16 pads** para VST3, CLAP, AU y como aplicación independiente, en macOS y Windows, en el espíritu de Sitala.
 
-Cada pad tiene un sonido y seis perillas: **Forma, Afinación, Tono, Compresión, Volumen y Paneo**. Forma y Compresión trabajan sobre la envolvente del propio sonido, medida al cargarlo, así que se comportan de manera musical con cualquier sonido y mantienen su volumen. Trae un **kit analógico** de dieciséis sonidos sintetizados desde cero, al estilo de las cajas de ritmo de los 80, que se puede usar libremente.
+Cada pad tiene un sonido y seis perillas: **Forma, Afinación, Tono, Compresión, Volumen y Paneo**. Forma y Compresión trabajan sobre la envolvente del propio sonido, medida al cargarlo, así que se comportan de manera musical con cualquier sonido y mantienen su volumen. Trae un **kit analógico** de dieciséis sonidos sintetizados desde cero, al estilo de las cajas de ritmo de los 80, ordenado en los pads como el kit 808 de Sitala, que se puede usar libremente.
 
 ![Interfaz de Kupata](docs/captura.png)
 
@@ -15,7 +15,7 @@ Las versiones de prueba, que todavía no se publicaron como Release, están en l
 
 ## Cómo se usa
 
-- **Tocar**: las notas desde Do2 (C2) tocan los pads 1 a 16; el pad 1 está abajo a la izquierda, como en una MPC. Un clic en un pad lo toca y lo elige (más abajo en el pad, más fuerte). **Notas** cambia el mapa de todo el kit: cromático, teclas blancas o batería General MIDI. **Aprender** (o clic derecho en un pad) le asigna la próxima tecla que toques.
+- **Tocar**: el kit analógico está ordenado como el kit 808 de Sitala y responde a sus mismas notas (batería General MIDI: bombo en Do2/C2, tambor en Re2, hihat cerrado en Fa#2…), así que las partes MIDI escritas para Sitala tocan los mismos instrumentos. El pad 1 está abajo a la izquierda, como en una MPC. Un clic en un pad lo toca y lo elige (más abajo en el pad, más fuerte). **Notas** cambia el mapa de todo el kit: cromático desde Do2, teclas blancas o batería General MIDI. **Aprender** (o clic derecho en un pad) le asigna la próxima tecla que toques.
 - **Cargar sonidos**: soltá uno o varios archivos sobre un pad (WAV, AIFF, FLAC, Ogg; en Mac también MP3 y otros); varios archivos llenan los pads siguientes. También desde el navegador **Sonidos**: un clic escucha, las flechas recorren la carpeta escuchando cada sonido, doble clic o arrastrar a un pad carga. Clic derecho en un pad: cargar, sonido de fábrica, copiar, pegar, volver las perillas al inicio, vaciar.
 - **Ordenar**: arrastrá un pad sobre otro para intercambiarlos, con Alt para copiarlo. Las notas quedan en su lugar: el sonido se muda con sus perillas.
 - **Recortar**: en la pantalla, arrastrá los marcadores de inicio y final. El silencio del principio y del final de cada archivo se quita solo, para que suene a tiempo. La forma oscura es el sonido tal como suena ahora, con sus perillas; la clara, el original.
@@ -59,7 +59,16 @@ Los sonidos de hasta 12 segundos se guardan dentro de la sesión del DAW, así q
 
 ## El kit analógico
 
-Los dieciséis sonidos se generan con [`tools/sintetizar_kit.py`](tools/sintetizar_kit.py) siguiendo los principios de los circuitos de las cajas de ritmo analógicas de los 80: resonadores amortiguados golpeados por un pulso (bombos, tambores, toms, aro, clave), ruido filtrado (palmas, maracas) y un banco de seis osciladores cuadrados desafinados para los metales (hihats, platillo, cencerro). No usa muestras de ninguna máquina ni de ninguna librería, así que se puede compartir y usar en cualquier música sin pedir permiso. Para cambiarlo, editá el script y volvé a correrlo: escribe los archivos de `Resources/kit`.
+| Fila | Pads |
+|---|---|
+| 13 – 16 | Clave · Maracas · Cencerro · Aro |
+| 9 – 12 | Conga grave · Conga media · Conga aguda · Palmas |
+| 5 – 8 | Platillo · Tom grave · Tom medio · Tom agudo |
+| 1 – 4 | Bombo largo · Tambor · Hihat cerrado · Hihat abierto |
+
+Es el mismo orden que el kit 808 de Sitala: con Multisalida, cada instrumento sale por los mismos canales. El bombo corto, el tambor brillante y el bombo sub siguen disponibles para cualquier pad en clic derecho → *Sonido de fábrica*.
+
+Los dieciséis sonidos se generan con [`tools/sintetizar_kit.py`](tools/sintetizar_kit.py) siguiendo los principios de los circuitos de las cajas de ritmo analógicas de los 80: resonadores amortiguados golpeados por un pulso (bombos, tambores, toms, congas, aro, clave), ruido filtrado (palmas, maracas) y un banco de seis osciladores cuadrados desafinados para los metales (hihats, platillo, cencerro). No usa muestras de ninguna máquina ni de ninguna librería, así que se puede compartir y usar en cualquier música sin pedir permiso. Para cambiarlo, editá el script y volvé a correrlo: escribe los archivos de `Resources/kit`.
 
 ## Compilar
 

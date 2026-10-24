@@ -277,7 +277,7 @@ void KupataProcessor::loadFactoryKit()
         loadFactory (p, factoryLayout (p));
         resetKnobs (p);
         PadRouting r;
-        r.note = firstNote + p;
+        r.note = presetNote (2, p);   // the kit's own notes (General MIDI, as in Sitala)
         r.choke = factorySounds()[(size_t) factoryLayout (p)].choke;
         setRouting (p, r);
     }

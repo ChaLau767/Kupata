@@ -195,12 +195,13 @@ KIT = [
     (19, "conga-aguda",    "High conga",   "Conga aguda",      0, lambda: finish(conga(370.0, 0.065, 0.45), -3.0, 0.02)),
 ]
 
-# The kit as it comes: which sound goes on each pad, from pad 1 (bottom left) to 16. The sounds left
-# out (short kick, bright snare, sub kick) stay in the list of factory sounds, for any pad.
-LAYOUT = [1, 3, 5, 6,     # kick, snare, clap, rimshot
-          7, 8, 9, 15,    # closed hat, open hat, cymbal, maracas
-          10, 11, 12, 13, # toms, cowbell
-          17, 18, 19, 14] # congas, clave
+# The kit as it comes: which sound goes on each pad, from pad 1 (bottom left) to 16, in the order of
+# Sitala's 808 kit. The sounds left out (short kick, bright snare, sub kick) stay in the list of
+# factory sounds, for any pad.
+LAYOUT = [1, 3, 7, 8,     # kick, snare, closed hat, open hat
+          9, 10, 11, 12,  # cymbal, low, mid and high tom
+          17, 18, 19, 5,  # low, mid and high conga, clap
+          14, 15, 13, 6]  # clave, maracas, cowbell, rimshot
 
 
 def write_kit():

@@ -168,18 +168,18 @@ int main (int argc, char** argv)
         const char* pattern[] {
             "x.......x.x.....x.......x...x...",   // pad 1 kick
             "....x.......x.......x.......x..x",   // pad 2 snare
-            "x.x.x.x.x.x.x.xxx.x.x.x.x.x.x.x.",   // pad 5 closed hat
-            "..............x...............x.",   // pad 6 open hat
-            "............x...............x...",   // pad 3 clap
-            "......x.........x.....x.........",   // pad 12 cowbell
-            "x.....x.....x.x.....x.....x.x...",   // pad 13 low conga
-            "...x......x.........x.....x.....",   // pad 4 rim
+            "x.x.x.x.x.x.x.xxx.x.x.x.x.x.x.x.",   // pad 3 closed hat
+            "..............x...............x.",   // pad 4 open hat
+            "............x...............x...",   // pad 12 clap
+            "......x.........x.....x.........",   // pad 15 cowbell
+            "x.....x.....x.x.....x.....x.x...",   // pad 9 low conga
+            "...x......x.........x.....x.....",   // pad 16 rim
         };
-        const int notes[] { 36, 37, 40, 41, 38, 47, 48, 39 };   // kick, snare, hats, clap, cowbell, low conga, rim
+        const int notes[] { 36, 38, 42, 46, 39, 56, 64, 37 };   // the kit's own notes (General MIDI, as in Sitala)
         proc.setParam ("gain", -7.0f);
-        proc.setParam ("p12_volume", -8.0f);
-        proc.setParam ("p13_volume", -4.0f);
-        proc.setParam ("p5_volume", -4.0f);
+        proc.setParam ("p15_volume", -8.0f);
+        proc.setParam ("p9_volume", -4.0f);
+        proc.setParam ("p3_volume", -4.0f);
         const int total = (int) (sr * step * 32 * 2) + (int) sr;
         juce::AudioBuffer<float> out (2, total);
         out.clear();
@@ -239,7 +239,8 @@ int main (int argc, char** argv)
                "knobs restored");
         check (b.padInfo (0).factory == 0 && b.padInfo (0).loaded(), "factory pads restored");
         check (! b.padInfo (9).loaded(), "the cleared pad stays empty");
-        check (b.padInfo (5).routing.choke == 1, "the open hat keeps its choke group");
+        check (b.padInfo (2).routing.choke == 1 && b.padInfo (3).routing.choke == 1, "the hats keep their choke group");
+        check (b.padInfo (8).routing.note == 64 && b.padInfo (11).routing.note == 39, "the kit's notes are Sitala's (low conga 64, clap 39)");
         check (b.padInfo (8).factory == 15 && b.padInfo (8).loaded(), "a factory sound outside the kit (the sub kick) is restored");
 
         // the sound travels inside the session: it plays even when the file is gone
@@ -287,7 +288,7 @@ int main (int argc, char** argv)
             check (proc.numOutputs() == 2, "the track's 2 channels count, not the plugin's 32 (" + juce::String (proc.numOutputs()) + ")");
             const int made = proc.buildReaperTracks();
             check (made == 16 && fake::tracks.size() == 19, "16 tracks created (" + juce::String (made) + ")");
-            check (fake::tracks[2]->name == "Kick long" && fake::tracks[17]->name == "Clave" && fake::tracks[18]->name == "Vox",
+            check (fake::tracks[2]->name == "Kick long" && fake::tracks[17]->name == "Rimshot" && fake::tracks[18]->name == "Vox",
                    "named after the pads, right under Kupata's track");
             check (drums->nchan == 32 && ! drums->mainSend && drums->folder == 1 && fake::tracks[17]->folder == -1, "32 channels, a folder, no double sound");
             bool sends = drums->sends.size() == 16;
@@ -329,7 +330,8 @@ int main (int argc, char** argv)
             proc.getVST3ClientExtensions()->setIHostApplication (&host);
             wait (1200);
             check (proc.reaperRouted() && proc.padInfo (6).routing.out == 12, "REAPER's own routing turns multi-out on");
-            check (fake::tracks[1]->name == "Kick long" && fake::tracks[7]->name == "Cymbal", "REAPER's tracks take the pads' names");
+            check (fake::tracks[1]->name == "Kick long" && fake::tracks[7]->name == "Mid tom" && fake::tracks[10]->name == "Mid conga",
+                   "REAPER's tracks take the pads' names");
             check (fake::tracks[16]->name == "Reverb", "a track with a name of its own is left alone");
             proc.setMultiOut (false);
             wait (1200);
@@ -375,13 +377,13 @@ int main (int argc, char** argv)
         };
         for (int pad = 0; pad < 16; ++pad)
         {
-            auto [ok, pk] = play (36 + pad, 20);
+            auto [ok, pk] = play (proc.padInfo (pad).routing.note, 20);
             check (ok && pk[0] > 0.05f, "factory pad " + juce::String (pad + 1) + " sounds (peak " + juce::String (pk[0], 2) + ")");
         }
         proc.setMultiOut (true);
-        auto [ok2, pk2] = play (38);
+        auto [ok2, pk2] = play (42);   // pad 3, the closed hat
         check (ok2 && pk2[4] > 0.05f && pk2[0] < 1.0e-4f, "multi-out: pad 3 on outputs 5-6 only");
-        auto [ok3, pk3] = play (40);
+        auto [ok3, pk3] = play (49);   // pad 5, the cymbal
         check (ok3 && pk3[0] > 0.05f, "multi-out: pad 5 falls back to 1-2 when the track has no 9-10");
         proc.setMultiOut (false);
         proc.playPad (0, 1.0f);
@@ -391,8 +393,8 @@ int main (int argc, char** argv)
         auto [ok5, pk5] = play (-1, 20);
         check (ok5 && pk5[0] < 1.0e-4f, "then silence");
         proc.startLearn (5);
-        play (70, 2);
-        check (proc.pollLearn() && proc.padInfo (5).routing.note == 70, "note learn: pad 6 now plays on 70");
+        play (90, 2);
+        check (proc.pollLearn() && proc.padInfo (5).routing.note == 90, "note learn: pad 6 now plays on 90");
         std::printf (failures == 0 ? "\nall playback tests passed\n" : "\n%d playback tests failed\n", failures);
         return failures == 0 ? 0 : 1;
     }

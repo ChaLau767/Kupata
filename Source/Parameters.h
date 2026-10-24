@@ -191,19 +191,21 @@ inline const std::array<FactorySound, numFactorySounds>& factorySounds()
     return sounds;
 }
 
-// The analog kit, pad 1 (bottom left) to 16: rows of drums, cymbals, toms and hand percussion.
+// The analog kit, pad 1 (bottom left) to 16, in the order of Sitala's 808 kit, so that the same pad
+// (and, with multi-out, the same outputs) holds the same instrument: kick, snare, closed and open hat,
+// cymbal, three toms, three congas, clap, clave, maracas, cowbell, rimshot.
 inline int factoryLayout (int pad)
 {
-    static const int layout[numPads] { 0, 2, 4, 5,  6, 7, 8, 14,  9, 10, 11, 12,  16, 17, 18, 13 };
+    static const int layout[numPads] { 0, 2, 6, 7,  8, 9, 10, 11,  16, 17, 18, 4,  13, 14, 12, 5 };
     return layout[juce::jlimit (0, numPads - 1, pad)];
 }
 
 // Note maps for the whole kit.
 inline int presetNote (int preset, int pad)
 {
-    // General MIDI drums, for the analog kit's sounds: kick, snare, clap, side stick; closed and open
-    // hi-hat, crash, maracas; low, mid and high tom, cowbell; low conga, open and mute high conga, claves
-    static const int gm[numPads]    { 36, 38, 39, 37, 42, 46, 49, 70, 45, 47, 50, 56, 64, 63, 62, 75 };
+    // General MIDI drums for the analog kit's sounds, the same notes as Sitala's 808 kit (the kit
+    // starts with them, so MIDI parts written for Sitala play the same instruments)
+    static const int gm[numPads]    { 36, 38, 42, 46, 49, 45, 47, 50, 64, 62, 63, 39, 75, 70, 56, 37 };
     static const int white[numPads] { 36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62 };
     pad = juce::jlimit (0, numPads - 1, pad);
     if (preset == 1) return white[pad];
