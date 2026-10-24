@@ -160,26 +160,26 @@ int main (int argc, char** argv)
 
     if (mode == "--demo")
     {
-        // two bars at 112 BPM: kick, snare, hats, clap, cowbell and a sub
+        // two bars at 112 BPM: kick, snare, hats, clap, cowbell, low conga and rim
         KupataProcessor proc;
         proc.setPlayConfigDetails (0, 2, 48000.0, 256);
         proc.prepareToPlay (48000.0, 256);
         const double sr = 48000.0, step = 60.0 / 112.0 / 4.0;
         const char* pattern[] {
-            "x.......x.x.....x.......x...x...",   // 36 kick long
-            "....x.......x.......x.......x..x",   // 38 snare
-            "x.x.x.x.x.x.x.xxx.x.x.x.x.x.x.x.",   // 42 closed hat
-            "..............x...............x.",   // 43 open hat
-            "............x...............x...",   // 40 clap
-            "......x.........x.....x.........",   // 48 cowbell
-            "x...............x.......x.......",   // 51 sub
-            "...x......x.........x.....x.....",   // 41 rim
+            "x.......x.x.....x.......x...x...",   // pad 1 kick
+            "....x.......x.......x.......x..x",   // pad 2 snare
+            "x.x.x.x.x.x.x.xxx.x.x.x.x.x.x.x.",   // pad 5 closed hat
+            "..............x...............x.",   // pad 6 open hat
+            "............x...............x...",   // pad 3 clap
+            "......x.........x.....x.........",   // pad 12 cowbell
+            "x.....x.....x.x.....x.....x.x...",   // pad 13 low conga
+            "...x......x.........x.....x.....",   // pad 4 rim
         };
-        const int notes[] { 36, 38, 42, 43, 40, 48, 51, 41 };
+        const int notes[] { 36, 37, 40, 41, 38, 47, 48, 39 };   // kick, snare, hats, clap, cowbell, low conga, rim
         proc.setParam ("gain", -7.0f);
-        proc.setParam ("p16_volume", -9.0f);
-        proc.setParam ("p13_volume", -8.0f);
-        proc.setParam ("p7_volume", -4.0f);
+        proc.setParam ("p12_volume", -8.0f);
+        proc.setParam ("p13_volume", -4.0f);
+        proc.setParam ("p5_volume", -4.0f);
         const int total = (int) (sr * step * 32 * 2) + (int) sr;
         juce::AudioBuffer<float> out (2, total);
         out.clear();
@@ -225,6 +225,7 @@ int main (int argc, char** argv)
         r.note = 60; r.out = 5; r.stereo = false; r.choke = 3;
         a.setRouting (4, r);
         a.clearPad (9);
+        a.loadFactory (8, 15);
         juce::MemoryBlock block;
         a.getStateInformation (block);
         check (block.getSize() > 1000, "the session saves (" + juce::String ((int) block.getSize()) + " bytes)");
@@ -238,7 +239,8 @@ int main (int argc, char** argv)
                "knobs restored");
         check (b.padInfo (0).factory == 0 && b.padInfo (0).loaded(), "factory pads restored");
         check (! b.padInfo (9).loaded(), "the cleared pad stays empty");
-        check (b.padInfo (6).routing.choke == 1 && b.padInfo (7).routing.choke == 1, "the hats keep their choke group");
+        check (b.padInfo (5).routing.choke == 1, "the open hat keeps its choke group");
+        check (b.padInfo (8).factory == 15 && b.padInfo (8).loaded(), "a factory sound outside the kit (the sub kick) is restored");
 
         // the sound travels inside the session: it plays even when the file is gone
         writeTestFile ("kupata-state.wav", 1, 0.1).deleteFile();
@@ -256,7 +258,7 @@ int main (int argc, char** argv)
 
         // moving a pad takes its knobs; hits to pads
         d.movePad (4, 11, false);
-        check (d.padInfo (11).loaded() && std::abs (d.padParams (11).shape + 40.0f) < 0.01f && d.padInfo (4).loaded() && d.padInfo (4).factory == 11,
+        check (d.padInfo (11).loaded() && std::abs (d.padParams (11).shape + 40.0f) < 0.01f && d.padInfo (4).loaded() && d.padInfo (4).factory == kupata::factoryLayout (11),
                "a pad moves with its knobs and the other comes back");
         d.setHit (11, 0);
         check (d.hitsToPads (11) == 4 && d.padInfo (14).hit == 4, "hits to pads: four pads filled");
@@ -285,7 +287,7 @@ int main (int argc, char** argv)
             check (proc.numOutputs() == 2, "the track's 2 channels count, not the plugin's 32 (" + juce::String (proc.numOutputs()) + ")");
             const int made = proc.buildReaperTracks();
             check (made == 16 && fake::tracks.size() == 19, "16 tracks created (" + juce::String (made) + ")");
-            check (fake::tracks[2]->name == "Kick long" && fake::tracks[17]->name == "Sub kick" && fake::tracks[18]->name == "Vox",
+            check (fake::tracks[2]->name == "Kick long" && fake::tracks[17]->name == "Clave" && fake::tracks[18]->name == "Vox",
                    "named after the pads, right under Kupata's track");
             check (drums->nchan == 32 && ! drums->mainSend && drums->folder == 1 && fake::tracks[17]->folder == -1, "32 channels, a folder, no double sound");
             bool sends = drums->sends.size() == 16;
@@ -327,7 +329,7 @@ int main (int argc, char** argv)
             proc.getVST3ClientExtensions()->setIHostApplication (&host);
             wait (1200);
             check (proc.reaperRouted() && proc.padInfo (6).routing.out == 12, "REAPER's own routing turns multi-out on");
-            check (fake::tracks[1]->name == "Kick long" && fake::tracks[7]->name == "Closed hat", "REAPER's tracks take the pads' names");
+            check (fake::tracks[1]->name == "Kick long" && fake::tracks[7]->name == "Cymbal", "REAPER's tracks take the pads' names");
             check (fake::tracks[16]->name == "Reverb", "a track with a name of its own is left alone");
             proc.setMultiOut (false);
             wait (1200);

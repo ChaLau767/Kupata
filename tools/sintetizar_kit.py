@@ -149,6 +149,13 @@ def tom(f0, tau, seconds):
     return drive(body + 0.2 * click(seconds, 1800.0, 0.001), 1.3)
 
 
+def conga(f0, tau, seconds):
+    """Congas as on the analog machines: the tom circuit tuned higher and shorter, an octave-ish
+    partial for the skin, and the slap of the hand in the attack. No noise."""
+    body = resonator(f0, tau, seconds, 0.06, 0.006) + 0.10 * resonator(f0 * 2.02, tau * 0.35, seconds, 0.0, 0.01, 1.1)
+    return drive(body + 0.25 * click(seconds, 3000.0, 0.0006), 1.4)
+
+
 def cowbell(seconds=0.65):
     x = 0.55 * square(540.0, seconds, 0.3) + 0.45 * square(800.0, seconds, 1.1)
     x = lowpass(bandpass(x, 480.0, 3200.0, 2), 5000.0, 2)
@@ -165,7 +172,7 @@ def maracas(seed, seconds=0.11):
 
 
 # ---------------------------------------------------------------------------------------------
-# pad (1 … 16, MPC order: pad 1 at the bottom left), file, English, Spanish, choke group, sound
+# number of the sound, file, English, Spanish, choke group, sound
 KIT = [
     (1,  "bombo-largo",    "Kick long",    "Bombo largo",      0, lambda: finish(kick(49.0, 0.28, 2.0, 0.35, 0.018, 0.25, 1.4), -1.0, 0.04)),
     (2,  "bombo-corto",    "Kick short",   "Bombo corto",      0, lambda: finish(kick(56.0, 0.075, 0.6, 0.6, 0.012, 0.5, 2.0), -1.0, 0.02)),
@@ -183,7 +190,17 @@ KIT = [
     (14, "clave",          "Clave",        "Clave",            0, lambda: finish(clave(), -5.0)),
     (15, "maracas",        "Maracas",      "Maracas",          0, lambda: finish(maracas(15), -6.0)),
     (16, "bombo-sub",      "Sub kick",     "Bombo sub",        0, lambda: finish(kick(41.2, 0.6, 3.6, 0.5, 0.02, 0.35, 3.0), -1.0, 0.3)),
+    (17, "conga-grave",    "Low conga",    "Conga grave",      0, lambda: finish(conga(185.0, 0.11, 0.6), -3.0, 0.02)),
+    (18, "conga-media",    "Mid conga",    "Conga media",      0, lambda: finish(conga(277.0, 0.085, 0.5), -3.0, 0.02)),
+    (19, "conga-aguda",    "High conga",   "Conga aguda",      0, lambda: finish(conga(370.0, 0.065, 0.45), -3.0, 0.02)),
 ]
+
+# The kit as it comes: which sound goes on each pad, from pad 1 (bottom left) to 16. The sounds left
+# out (short kick, bright snare, sub kick) stay in the list of factory sounds, for any pad.
+LAYOUT = [1, 3, 5, 6,     # kick, snare, clap, rimshot
+          7, 8, 9, 15,    # closed hat, open hat, cymbal, maracas
+          10, 11, 12, 13, # toms, cowbell
+          17, 18, 19, 14] # congas, clave
 
 
 def write_kit():
@@ -194,7 +211,8 @@ def write_kit():
         x = make().astype(np.float64)
         sf.write(OUT / f"{pad:02d}-{name}.flac", x, SR, subtype="PCM_24")
         sounds[pad] = x
-    manifest = [{"pad": p, "file": f"{p:02d}-{n}.flac", "en": en, "es": es, "choke": c} for p, n, en, es, c, _ in KIT]
+    manifest = {"sounds": [{"number": p, "file": f"{p:02d}-{n}.flac", "en": en, "es": es, "choke": c} for p, n, en, es, c, _ in KIT],
+                "layout": LAYOUT}
     (OUT / "kit.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     return sounds
 
@@ -203,7 +221,7 @@ def report(sounds, image):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(4, 4, figsize=(16, 11))
+    fig, axes = plt.subplots(5, 4, figsize=(16, 14))
     for (pad, name, en, es, choke, _), ax in zip(KIT, axes.ravel()):
         x = sounds[pad]
         peak = np.max(np.abs(x))

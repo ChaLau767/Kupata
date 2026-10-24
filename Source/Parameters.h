@@ -161,11 +161,13 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 }
 
 //==============================================================================
-// The factory kit: names of its sounds (Resources/kit/kit.json has the same order).
+// The factory sounds (Resources/kit, in the same order: sessions store this number) and the kit
+// they make: which of them goes on each pad. Sounds can be appended, never moved.
 struct FactorySound { const char* file; const char* en; const char* es; int choke; };
-inline const std::array<FactorySound, numPads>& factoryKit()
+constexpr int numFactorySounds = 19;
+inline const std::array<FactorySound, numFactorySounds>& factorySounds()
 {
-    static const std::array<FactorySound, numPads> kit { {
+    static const std::array<FactorySound, numFactorySounds> sounds { {
         { "01-bombo-largo",      "Kick long",    "Bombo largo",      0 },
         { "02-bombo-corto",      "Kick short",   "Bombo corto",      0 },
         { "03-tambor",           "Snare",        "Tambor",           0 },
@@ -182,14 +184,26 @@ inline const std::array<FactorySound, numPads>& factoryKit()
         { "14-clave",            "Clave",        "Clave",            0 },
         { "15-maracas",          "Maracas",      "Maracas",          0 },
         { "16-bombo-sub",        "Sub kick",     "Bombo sub",        0 },
+        { "17-conga-grave",      "Low conga",    "Conga grave",      0 },
+        { "18-conga-media",      "Mid conga",    "Conga media",      0 },
+        { "19-conga-aguda",      "High conga",   "Conga aguda",      0 },
     } };
-    return kit;
+    return sounds;
+}
+
+// The analog kit, pad 1 (bottom left) to 16: rows of drums, cymbals, toms and hand percussion.
+inline int factoryLayout (int pad)
+{
+    static const int layout[numPads] { 0, 2, 4, 5,  6, 7, 8, 14,  9, 10, 11, 12,  16, 17, 18, 13 };
+    return layout[juce::jlimit (0, numPads - 1, pad)];
 }
 
 // Note maps for the whole kit.
 inline int presetNote (int preset, int pad)
 {
-    static const int gm[numPads]    { 36, 35, 38, 40, 39, 37, 42, 46, 49, 45, 47, 50, 56, 75, 70, 41 };
+    // General MIDI drums, for the analog kit's sounds: kick, snare, clap, side stick; closed and open
+    // hi-hat, crash, maracas; low, mid and high tom, cowbell; low conga, open and mute high conga, claves
+    static const int gm[numPads]    { 36, 38, 39, 37, 42, 46, 49, 70, 45, 47, 50, 56, 64, 63, 62, 75 };
     static const int white[numPads] { 36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62 };
     pad = juce::jlimit (0, numPads - 1, pad);
     if (preset == 1) return white[pad];

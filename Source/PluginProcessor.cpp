@@ -17,8 +17,8 @@ namespace
     const void* factoryData (int index, int& size)
     {
         size = 0;
-        if (index < 0 || index >= numPads) return nullptr;
-        const juce::String wanted = juce::String (factoryKit()[(size_t) index].file) + ".flac";
+        if (index < 0 || index >= numFactorySounds) return nullptr;
+        const juce::String wanted = juce::String (factorySounds()[(size_t) index].file) + ".flac";
         for (int i = 0; i < BinaryData::namedResourceListSize; ++i)
             if (wanted == BinaryData::getNamedResourceOriginalFilename (BinaryData::namedResourceList[i]))
                 return BinaryData::getNamedResource (BinaryData::namedResourceList[i], size);
@@ -259,7 +259,7 @@ bool KupataProcessor::loadFile (int pad, const juce::File& file, juce::String& e
 
 void KupataProcessor::loadFactory (int pad, int index)
 {
-    if (! juce::isPositiveAndBelow (pad, numPads) || ! juce::isPositiveAndBelow (index, numPads)) return;
+    if (! juce::isPositiveAndBelow (pad, numPads) || ! juce::isPositiveAndBelow (index, numFactorySounds)) return;
     int size = 0;
     const void* data = factoryData (index, size);
     juce::String error;
@@ -274,11 +274,11 @@ void KupataProcessor::loadFactoryKit()
 {
     for (int p = 0; p < numPads; ++p)
     {
-        loadFactory (p, p);
+        loadFactory (p, factoryLayout (p));
         resetKnobs (p);
         PadRouting r;
         r.note = firstNote + p;
-        r.choke = factoryKit()[(size_t) p].choke;
+        r.choke = factorySounds()[(size_t) factoryLayout (p)].choke;
         setRouting (p, r);
     }
     apvts.state.setProperty ("kitName", "", nullptr);
@@ -296,7 +296,7 @@ juce::String KupataProcessor::padName (int pad, Lang lang) const
 {
     if (! juce::isPositiveAndBelow (pad, numPads)) return {};
     const auto& m = meta[(size_t) pad];
-    juce::String n = m.factory >= 0 ? u8 (lang == Lang::es ? factoryKit()[(size_t) m.factory].es : factoryKit()[(size_t) m.factory].en) : m.name;
+    juce::String n = m.factory >= 0 ? u8 (lang == Lang::es ? factorySounds()[(size_t) m.factory].es : factorySounds()[(size_t) m.factory].en) : m.name;
     if (m.hit > 0 && m.hits.size() > 1) n << " " << m.hit;
     return n;
 }

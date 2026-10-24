@@ -1330,8 +1330,8 @@ void Content::showPadMenu (int pad)
 {
     const auto info = processor.padInfo (pad);
     juce::PopupMenu m, factory;
-    for (int i = 0; i < numPads; ++i)
-        factory.addItem (100 + i, u8 (lang == Lang::es ? factoryKit()[(size_t) i].es : factoryKit()[(size_t) i].en));
+    for (int i = 0; i < numFactorySounds; ++i)
+        factory.addItem (100 + i, u8 (lang == Lang::es ? factorySounds()[(size_t) i].es : factorySounds()[(size_t) i].en));
     m.addItem (1, tr (lang, "load"));
     if (info.missing) m.addItem (2, tr (lang, "locate"));
     m.addSubMenu (tr (lang, "factorySound"), factory);
