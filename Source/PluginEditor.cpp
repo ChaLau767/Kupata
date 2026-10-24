@@ -1392,7 +1392,8 @@ void Content::saveKitDialog()
     dialog->addButton (tr (lang, "save"), 1, juce::KeyPress (juce::KeyPress::returnKey));
     dialog->addButton (tr (lang, "cancel"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
     dialog->setLookAndFeel (&lnf);
-    dialog->enterModalState (true, juce::ModalCallbackFunction::create ([this] (int result) {
+    juce::Component::SafePointer<Content> safe (this);
+    dialog->enterModalState (true, juce::ModalCallbackFunction::create ([this, safe] (int result) {
         if (result == 1 && dialog != nullptr)
         {
             auto name = dialog->getTextEditorContents ("name").trim();
@@ -1402,7 +1403,7 @@ void Content::saveKitDialog()
             updateTexts();
             repaint();
         }
-        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<Content> (this)] { if (safe != nullptr) safe->dialog.reset(); });
+        juce::MessageManager::callAsync ([safe] { if (safe != nullptr) safe->dialog.reset(); });
     }), false);
 }
 
