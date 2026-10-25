@@ -3,6 +3,7 @@
 #include "KupataEngine.h"
 #include <cstdio>
 #include <random>
+#include <algorithm>
 
 using namespace kupata;
 
@@ -300,6 +301,25 @@ int main()
         const Out over = render (e, q, (int) (SR * 0.6), { on (36), on (36, second, 0.0f) });
         check (over.peak (0, second + (int) (SR * 0.01), (int) (SR * 0.6)) > 0.1f, "not mono: the first hit rings on",
                over.peak (0, second + (int) (SR * 0.01), (int) (SR * 0.6)));
+    }
+
+    // --- reverse: the sound turned around, from the end marker back to the start one ---
+    {
+        auto turned = std::make_shared<Sample> (*e.sounds[0]->sample);
+        std::reverse (turned->left.begin(), turned->left.end());
+        std::reverse (turned->right.begin(), turned->right.end());
+        e.reversed[0] = soundOf (turned);
+        Params q = p; q.pads[0].reverse = true;
+        e.reset();
+        const Out rev = render (e, q, (int) SR, { on (36) });
+        const double early = rev.rms (0, 0, (int) (SR * 0.2)), late = rev.rms (0, (int) (SR * 0.8), (int) (SR * 0.98));
+        check (late > 20.0 * early, "reverse: the sound swells towards its end", db (late / early));
+        q.pads[0].end = 50.0f;
+        e.reset();
+        const Out half = render (e, q, (int) SR, { on (36) });
+        const double first = half.rms (0, 0, (int) (SR * 0.1)), last = half.rms (0, (int) (SR * 0.44), (int) (SR * 0.49));
+        check (lengthOf (half, -80.0) < 0.52 && last > 3.0 * first, "reverse with End at 50 %: the first half, backwards",
+               lengthOf (half, -80.0), db (last / first));
     }
 
     // --- outputs ---------------------------------------------------------------------

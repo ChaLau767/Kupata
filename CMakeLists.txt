@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(Kupata VERSION 0.1.0 LANGUAGES C CXX)
+project(Kupata VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -98,7 +98,7 @@ if(KUPATA_SNAPSHOT)
     target_sources(kupata_snapshot PRIVATE tests/Snapshot.cpp Source/PluginProcessor.cpp Source/PluginEditor.cpp Source/ReaperLink.cpp)
     target_include_directories(kupata_snapshot PRIVATE Source ${KUPATA_VST3_SDK})
     target_compile_definitions(kupata_snapshot PRIVATE
-        JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JucePlugin_VersionString="0.1.0" JUCE_STANDALONE_APPLICATION=1 JUCE_MODAL_LOOPS_PERMITTED=1)
+        JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JucePlugin_VersionString="0.2.0" JUCE_STANDALONE_APPLICATION=1 JUCE_MODAL_LOOPS_PERMITTED=1)
     target_link_libraries(kupata_snapshot PRIVATE KupataData juce::juce_audio_utils juce::juce_audio_formats juce::juce_recommended_config_flags)
 
     juce_add_console_app(kupata_hosttest PRODUCT_NAME "kupata_hosttest")

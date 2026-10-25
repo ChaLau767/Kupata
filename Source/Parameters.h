@@ -156,6 +156,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         group->addChild (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { padId (p, "mute"), 1 }, prefix + "Mute", false));
         group->addChild (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { padId (p, "solo"), 1 }, prefix + "Solo", false));
         group->addChild (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { padId (p, "mono"), 1 }, prefix + "Mono", true));
+        group->addChild (std::make_unique<juce::AudioParameterBool> (juce::ParameterID { padId (p, "reverse"), 2 }, prefix + "Reverse", false));
         layout.add (std::move (group));
     }
     return layout;
@@ -194,24 +195,31 @@ inline const std::array<FactorySound, numFactorySounds>& factorySounds()
 
 // The analog kit, pad 1 (bottom left) to 16, in the order of Sitala's 808 kit, so that the same pad
 // (and, with multi-out, the same outputs) holds the same instrument: kick, snare, closed and open hat,
-// cymbal, three toms, three congas, clap, clave, maracas, cowbell, rimshot.
+// cymbal, three toms, three congas, clap, clave, maracas, cowbell, rimshot. Bank B starts empty (-1).
 inline int factoryLayout (int pad)
 {
-    static const int layout[numPads] { 0, 2, 6, 7,  8, 9, 10, 11,  16, 17, 18, 4,  13, 14, 12, 5 };
-    return layout[juce::jlimit (0, numPads - 1, pad)];
+    static const int layout[bankSize] { 0, 2, 6, 7,  8, 9, 10, 11,  16, 17, 18, 4,  13, 14, 12, 5 };
+    return juce::isPositiveAndBelow (pad, bankSize) ? layout[pad] : -1;
 }
 
-// Note maps for the whole kit.
-inline int presetNote (int preset, int pad)
+// Note maps for the whole kit (both banks).
+enum NoteMap { mapChromatic = 0, mapWhite, mapGeneralMidi, numNoteMaps };
+inline int presetNote (int preset, int pad, int base = firstNote)
 {
-    // General MIDI drums for the analog kit's sounds, the same notes as Sitala's 808 kit (the kit
-    // starts with them, so MIDI parts written for Sitala play the same instruments)
-    static const int gm[numPads]    { 36, 38, 42, 46, 49, 45, 47, 50, 64, 62, 63, 39, 75, 70, 56, 37 };
-    static const int white[numPads] { 36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62 };
     pad = juce::jlimit (0, numPads - 1, pad);
-    if (preset == 1) return white[pad];
-    if (preset == 2) return gm[pad];
-    return firstNote + pad;
+    if (preset == mapGeneralMidi)
+    {
+        // the same notes as Sitala's 808 kit (the kit starts with them, so MIDI parts written for
+        // Sitala play the same instruments); bank B goes on from C5
+        static const int gm[bankSize] { 36, 38, 42, 46, 49, 45, 47, 50, 64, 62, 63, 39, 75, 70, 56, 37 };
+        return pad < bankSize ? gm[pad] : 72 + pad - bankSize;
+    }
+    if (preset == mapWhite)
+    {
+        static const int steps[7] { 0, 2, 4, 5, 7, 9, 11 };
+        return juce::jlimit (0, 127, 36 + 12 * (pad / 7) + steps[pad % 7]);
+    }
+    return juce::jlimit (0, 127, base + pad);
 }
 
 //==============================================================================
@@ -280,10 +288,27 @@ inline juce::String tr (Lang lang, const char* key)
         { "reaperFailed", "REAPER did not let Kupata create the tracks", "REAPER no dejó que Kupata creara las pistas" },
         { "multiOutReaperTip", "Each pad to its own output. In REAPER, Kupata can also create a track per pad, named after it", "Cada pad a su propia salida. En REAPER, Kupata también puede crear una pista por pad, con su nombre" },
         { "notes",        "Notes",                            "Notas" },
-        { "notesTip",     "Note map for the whole kit",       "Mapa de notas de todo el kit" },
-        { "chromatic",    "Chromatic from C2",                "Cromático desde Do2" },
-        { "whiteKeys",    "White keys from C2",               "Teclas blancas desde Do2" },
-        { "generalMidi",  "General MIDI drums",               "Batería General MIDI" },
+        { "notesTip",     "Which keys play the pads. Each pad shows its note in its top right corner", "Qué teclas tocan los pads. Cada pad muestra su nota arriba a la derecha" },
+        { "mapChromatic", "In a row",                         "Seguidas" },
+        { "mapWhite",     "White keys",                       "Teclas blancas" },
+        { "mapGm",        "Sitala (GM)",                      "Sitala (GM)" },
+        { "mapCustom",    "Your own",                         "Propias" },
+        { "chromatic",    "In a row, from C2: pad 1 C2, pad 2 C#2…", "Seguidas, desde Do2: pad 1 Do2, pad 2 Do#2…" },
+        { "fromKey",      "In a row, from the next key you play", "Seguidas, desde la próxima tecla que toques" },
+        { "fromKeyWait",  "Play the key for pad 1…",          "Tocá la tecla del pad 1…" },
+        { "whiteKeys",    "White keys, from C2",              "Teclas blancas, desde Do2" },
+        { "generalMidi",  "Sitala / General MIDI drums: kick C2, snare D2, hat F#2…", "Sitala / batería General MIDI: bombo Do2, tambor Re2, hihat Fa#2…" },
+        { "selectByMidi", "A pad played by MIDI becomes the selected one", "El pad que tocás por MIDI queda elegido" },
+        { "kitByProgram", "Program Change switches kits (0: analog kit, 1 on: your kits)", "Program Change cambia de kit (0: kit analógico, 1 en adelante: tus kits)" },
+        { "midiIn",       "MIDI",                             "MIDI" },
+        { "midiTip",      "The last note that reached Kupata, and how strong. If a key does not play a pad, its note is not in the map: see Notes", "La última nota que le llegó a Kupata, y con qué fuerza. Si una tecla no toca ningún pad, su nota no está en el mapa: mirá Notas" },
+        { "noPad",        "no pad",                           "ningún pad" },
+        { "bank",         "Bank",                             "Banco" },
+        { "bankTip",      "Two banks of 16 pads: A and B. Bank B plays on notes of its own and, with multi-out, on outputs 33-64", "Dos bancos de 16 pads: A y B. El B se toca con sus propias notas y, con multisalida, sale por 33-64" },
+        { "reverse",      "Reverse",                          "Reversa" },
+        { "playsBackwards", "plays backwards, from End to Start", "suena al revés, de Final a Inicio" },
+        { "reverseTip",   "The sound plays from its end to its start", "El sonido suena desde el final hacia el principio" },
+        { "tuneSnapTip",  "On sounds with a clear pitch, Tune stops on exact notes. Hold Shift to tune freely", "En los sonidos con altura definida, Afinación se detiene en notas exactas. Con Mayúsculas, afinación libre" },
         { "browser",      "Sounds",                           "Sonidos" },
         { "browserTip",   "Click: listen · Double-click or drag onto a pad: load", "Clic: escuchar · Doble clic o arrastrar a un pad: cargar" },
         { "chooseFolder", "Choose a folder…",                 "Elegir una carpeta…" },

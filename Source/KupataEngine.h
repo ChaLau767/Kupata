@@ -1,12 +1,12 @@
-// Kupata — 16-pad drum sampler engine (no JUCE: it can be tested on its own)
+// Kupata — 32-pad drum sampler engine (no JUCE: it can be tested on its own)
 // Copyright (C) 2026 Lautaro Martín Vieyra
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Sixteen pads, each with a sound and six knobs: Shape, Tune, Tone, Compression,
-// Volume and Pan. Shape and Compression work from the sound's own envelope, measured
+// Two banks of sixteen pads, each pad with a sound and six knobs: Shape, Tune, Tone,
+// Compression, Volume and Pan. Shape and Compression work from the sound's own envelope, measured
 // when it is loaded, so they behave musically with any sound and keep its loudness
 // steady. Tone reaches further on dark sounds than on bright ones. Every pad can be
-// trimmed, gated, muted, soloed, put in a choke group and sent to its own outputs.
+// trimmed, reversed, gated, muted, soloed, put in a choke group and sent to its own outputs.
 
 #pragma once
 
@@ -16,7 +16,9 @@
 namespace kupata
 {
 
-constexpr int numPads    = 16;
+constexpr int bankSize   = 16;
+constexpr int numBanks   = 2;     // A and B
+constexpr int numPads    = bankSize * numBanks;
 constexpr int maxVoices  = 64;
 constexpr int maxPerPad  = 6;     // overlapping hits of one pad
 constexpr int maxOutputs = 64;    // output channels
@@ -36,6 +38,7 @@ struct PadParams
     float end    = 100.0f;   // % of the sound
     bool gate = false, mute = false, solo = false;
     bool mono = true;        // a new hit cuts the one still sounding (off: they overlap)
+    bool reverse = false;    // the sound plays from its end to its start
 };
 
 // Settings of a pad that belong to the kit (stored with the session).
@@ -156,15 +159,20 @@ public:
     uint32_t age = 0;
     bool releasing = false;
 
-    void start (const Sound& s, const PadParams& p, float velocity, double engineSr, int padIndex, int noteNumber, uint32_t serial) noexcept
+    // reversed: s is the pad's sound turned around; the trim markers still refer to the sound as it is
+    void start (const Sound& s, const PadParams& p, float velocity, double engineSr, int padIndex, int noteNumber, uint32_t serial,
+                bool isReversed = false) noexcept
     {
         snd = &s;
         pad = padIndex; note = noteNumber; age = serial;
         active = true; releasing = false;
+        reversed = isReversed;
         sr = engineSr;
         const int len = s.regionLength();
-        startFrame = s.regionStart + (int) (std::clamp (p.start, 0.0f, 100.0f) * 0.01f * len);
-        endFrame = s.regionStart + (int) (std::clamp (p.end, 0.0f, 100.0f) * 0.01f * len);
+        const float a = std::clamp (reversed ? 100.0f - p.end : p.start, 0.0f, 100.0f);
+        const float b = std::clamp (reversed ? 100.0f - p.start : p.end, 0.0f, 100.0f);
+        startFrame = s.regionStart + (int) (a * 0.01f * len);
+        endFrame = s.regionStart + (int) (b * 0.01f * len);
         endFrame = std::clamp (endFrame, std::min (s.regionEnd, startFrame + 64), s.regionEnd);
         pos = startFrame;
         fadeIn = startFrame > s.regionStart + 8;
@@ -294,10 +302,11 @@ public:
         if (! std::isfinite (lastGain)) active = false;
     }
 
-    float position01() const noexcept   // where the hit is, in its sound
+    float position01() const noexcept   // where the hit is, in the sound as it is (not turned around)
     {
         if (snd == nullptr || snd->regionLength() <= 0) return 0.0f;
-        return (float) std::clamp ((pos - snd->regionStart) / snd->regionLength(), 0.0, 1.0);
+        const float x = (float) std::clamp ((pos - snd->regionStart) / snd->regionLength(), 0.0, 1.0);
+        return reversed ? 1.0f - x : x;
     }
     float currentLevel() const noexcept { return std::min (1.0f, level * 0.5f) * release; }
     const Sound* sound() const noexcept { return snd; }
@@ -307,7 +316,7 @@ private:
     const Sound* snd = nullptr;
     double sr = 44100.0, pos = 0.0;
     int startFrame = 0, endFrame = 0;
-    bool fadeIn = false, first = true;
+    bool fadeIn = false, first = true, reversed = false;
     float vel = 1.0f, release = 1.0f, releaseStep = 0.0f, gr = 0.0f, lastGain = 1.0f, muteGain = 1.0f, level = 0.0f;
     detail::Svf lp, hp, shelf;
 };
@@ -316,7 +325,8 @@ private:
 class Engine
 {
 public:
-    std::array<std::shared_ptr<const Sound>, numPads> sounds {};   // change with the engine locked
+    std::array<std::shared_ptr<const Sound>, numPads> sounds {};     // change with the engine locked
+    std::array<std::shared_ptr<const Sound>, numPads> reversed {};   // the same sounds turned around
     std::array<PadRouting, numPads> routing {};
 
     Engine()
@@ -412,12 +422,12 @@ public:
     }
 
     // Renders a pad offline (mono, no volume or pan), for the interface's picture of it.
-    static void renderOffline (const Sound& s, PadParams p, double sampleRate, int maxFrames, std::vector<float>& dest)
+    static void renderOffline (const Sound& s, PadParams p, double sampleRate, int maxFrames, std::vector<float>& dest, bool isReversed = false)
     {
         dest.clear();
         Voice v;
         p.volume = 0.0f; p.pan = 0.0f; p.mute = false; p.gate = false;
-        v.start (s, p, 1.0f, sampleRate, 0, -1, 0);
+        v.start (s, p, 1.0f, sampleRate, 0, -1, 0, isReversed);
         PadRouting r;
         r.out = 0; r.stereo = false;
         std::vector<float> buf (256);
@@ -459,7 +469,8 @@ private:
     void trigger (int pad, int note, float velocity) noexcept
     {
         if (pad < 0 || pad >= numPads) return;
-        const auto& snd = sounds[(size_t) pad];
+        const bool rev = params.pads[(size_t) pad].reverse && reversed[(size_t) pad] != nullptr;
+        const auto& snd = rev ? reversed[(size_t) pad] : sounds[(size_t) pad];
         if (snd == nullptr || snd->regionLength() < 2) return;
         const auto& rt = routing[(size_t) pad];
 
@@ -493,7 +504,7 @@ private:
                 if (slot == nullptr || (v.releasing && ! slot->releasing)
                     || (v.releasing == slot->releasing && v.age - slot->age > 0x80000000u)) slot = &v;
         }
-        slot->start (*snd, params.pads[(size_t) pad], velocity, sr, pad, note, ++serial);
+        slot->start (*snd, params.pads[(size_t) pad], velocity, sr, pad, note, ++serial, rev);
     }
 
     void releasePad (int pad, int note) noexcept

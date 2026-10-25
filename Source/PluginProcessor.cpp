@@ -12,7 +12,7 @@ namespace
 {
     constexpr double maxSeconds = 60.0;        // longer files are cut
     constexpr double embedSeconds = 12.0;      // sounds up to this long travel inside the session
-    const char* const paramBases[] { "shape", "tune", "tone", "comp", "volume", "pan", "start", "end", "gate", "mute", "solo", "mono" };
+    const char* const paramBases[] { "shape", "tune", "tone", "comp", "volume", "pan", "start", "end", "gate", "mute", "solo", "mono", "reverse" };
 
     const void* factoryData (int index, int& size)
     {
@@ -49,11 +49,12 @@ KupataProcessor::KupataProcessor()
     {
         auto q = [&] (const char* b) { return r (padId (p, b)); };
         padRefs[(size_t) p] = { q ("shape"), q ("tune"), q ("tone"), q ("comp"), q ("volume"), q ("pan"), q ("start"), q ("end"),
-                                q ("gate"), q ("mute"), q ("solo"), q ("mono") };
+                                q ("gate"), q ("mute"), q ("solo"), q ("mono"), q ("reverse") };
     }
     if (! apvts.state.hasProperty ("lang")) apvts.state.setProperty ("lang", 0, nullptr);
+    for (int p = 0; p < numPads; ++p) routingNotes[(size_t) p] = engine.routing[(size_t) p].note;
     loadFactoryKit();
-    startTimer (500);
+    startTimer (100);
 }
 
 KupataProcessor::~KupataProcessor()
@@ -90,6 +91,7 @@ Params KupataProcessor::readParams() const noexcept
         o.volume = R.volume->load(); o.pan = R.pan->load(); o.start = R.start->load(); o.end = R.end->load();
         o.gate = R.gate->load() > 0.5f; o.mute = R.mute->load() > 0.5f; o.solo = R.solo->load() > 0.5f;
         o.mono = R.mono->load() > 0.5f;
+        o.reverse = R.reverse->load() > 0.5f;
     }
     return p;
 }
@@ -123,8 +125,18 @@ void KupataProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         if (m.isNoteOn())
         {
             const int lp = learnPad.load();
-            if (lp >= 0) { learnedNote = m.getNoteNumber(); learnedFor = lp; learnPad = -1; }
+            if (lp >= 0 || lp == learnBase) { learnedNote = m.getNoteNumber(); learnedFor = lp; learnPad = -1; }
             e.type = Event::noteOn; e.note = m.getNoteNumber(); e.velocity = m.getFloatVelocity();
+            lastNote = e.note;
+            lastVelocity = m.getVelocity();
+            ++midiCount;
+            for (int p = 0; p < numPads; ++p)
+                if (routingNotes[(size_t) p].load() == e.note) { midiPad = p; break; }
+        }
+        else if (m.isProgramChange())
+        {
+            pendingProgram = m.getProgramChangeNumber();   // the kit is changed on the message thread
+            continue;
         }
         else if (m.isNoteOff())                   { e.type = Event::noteOff; e.note = m.getNoteNumber(); }
         else if (m.isAllNotesOff() || m.isAllSoundOff()) e.type = Event::allNotesOff;
@@ -200,16 +212,33 @@ juce::MemoryBlock KupataProcessor::encode (const Sample& s) const
     return block;
 }
 
+// The same sound turned around, with an analysis of its own (its envelope rises instead of falling).
+static std::shared_ptr<const Sound> reversedOf (const std::shared_ptr<const Sound>& s)
+{
+    if (s == nullptr || s->regionLength() < 2) return nullptr;
+    auto smp = std::make_shared<Sample>();
+    smp->sampleRate = s->sample->sampleRate;
+    smp->left.assign (s->sample->left.begin() + s->regionStart, s->sample->left.begin() + s->regionEnd);
+    smp->right.assign (s->sample->right.begin() + s->regionStart, s->sample->right.begin() + s->regionEnd);
+    std::reverse (smp->left.begin(), smp->left.end());
+    std::reverse (smp->right.begin(), smp->right.end());
+    return analysis::makeSound (smp, analysis::mono (*smp), 0, smp->length());
+}
+
 void KupataProcessor::setPadSound (int pad, std::shared_ptr<const Sound> sound)
 {
-    std::shared_ptr<const Sound> old;
+    auto turned = reversedOf (sound);
+    std::shared_ptr<const Sound> old, oldTurned;
     {
         const juce::SpinLock::ScopedLockType lock (engineLock);
         engine.stopVoicesOf (pad);
         old = std::move (engine.sounds[(size_t) pad]);
+        oldTurned = std::move (engine.reversed[(size_t) pad]);
         engine.sounds[(size_t) pad] = std::move (sound);
+        engine.reversed[(size_t) pad] = std::move (turned);
     }
     old.reset();   // freed here, on the message thread
+    oldTurned.reset();
     ++version;
 }
 
@@ -275,12 +304,14 @@ void KupataProcessor::loadFactoryKit()
 {
     for (int p = 0; p < numPads; ++p)
     {
-        loadFactory (p, factoryLayout (p));
+        const int sound = factoryLayout (p);
+        if (sound >= 0) loadFactory (p, sound);
+        else clearPad (p);   // bank B starts empty
         resetKnobs (p);
-        if (factoryLayout (p) == 8) setParam (padId (p, "mono"), 0.0f);   // the cymbal rings over itself, as in Sitala
+        if (sound == 8) setParam (padId (p, "mono"), 0.0f);   // the cymbal rings over itself, as in Sitala
         PadRouting r;
-        r.note = presetNote (2, p);   // the kit's own notes (General MIDI, as in Sitala)
-        r.choke = factorySounds()[(size_t) factoryLayout (p)].choke;
+        r.note = presetNote (mapGeneralMidi, p);   // the kit's own notes (General MIDI, as in Sitala)
+        r.choke = sound >= 0 ? factorySounds()[(size_t) sound].choke : 0;
         setRouting (p, r);
     }
     apvts.state.setProperty ("kitName", "", nullptr);
@@ -365,18 +396,47 @@ void KupataProcessor::setRouting (int pad, const PadRouting& r)
         d.out = juce::jlimit (0, maxOutputs - 1, r.out);
         d.stereo = r.stereo;
         d.choke = juce::jlimit (0, numChokes, r.choke);
+        routingNotes[(size_t) pad] = d.note;
     }
     ++version;
 }
 
-void KupataProcessor::setNotePreset (int preset)
+void KupataProcessor::setNotePreset (int preset, int base)
 {
     for (int p = 0; p < numPads; ++p)
     {
         auto r = padInfo (p).routing;
-        r.note = presetNote (preset, p);
+        r.note = presetNote (preset, p, base);
         setRouting (p, r);
     }
+}
+
+int KupataProcessor::currentNoteMap() const
+{
+    for (int preset = 0; preset < numNoteMaps; ++preset)
+    {
+        bool same = true;
+        for (int p = 0; p < numPads && same; ++p) same = routingNotes[(size_t) p].load() == presetNote (preset, p);
+        if (same) return preset;
+    }
+    return -1;
+}
+
+bool KupataProcessor::bankInUse (int b)
+{
+    for (int p = b * bankSize; p < (b + 1) * bankSize && p < numPads; ++p)
+        if (padInfo (p).loaded() || meta[(size_t) p].missing) return true;
+    return false;
+}
+
+juce::Array<juce::File> KupataProcessor::userKits() const
+{
+    juce::Array<juce::File> kits;
+    const auto folder = kitsFolder();
+    if (folder.isDirectory())
+        for (const auto& e : juce::RangedDirectoryIterator (folder, false, "*.kupata")) kits.add (e.getFile());
+    std::sort (kits.begin(), kits.end(), [] (const juce::File& a, const juce::File& b) { return a.getFileName().compareNatural (b.getFileName()) < 0; });
+    return kits;
 }
 
 void KupataProcessor::setMultiOut (bool on, int channels)
@@ -450,7 +510,9 @@ bool KupataProcessor::pollLearn()
 {
     const int pad = learnedFor.exchange (-1);
     const int note = learnedNote.exchange (-1);
-    if (pad < 0 || note < 0) return false;
+    if (note < 0) return false;
+    if (pad == learnBase) { setNotePreset (mapChromatic, juce::jlimit (0, 127 - numPads + 1, note)); return true; }
+    if (pad < 0) return false;
     auto r = padInfo (pad).routing;
     r.note = note;
     setRouting (pad, r);
@@ -495,7 +557,15 @@ void KupataProcessor::renderPicture (int pad, std::vector<float>& dest, int maxF
     dest.clear();
     const auto info = padInfo (pad);
     if (info.sound == nullptr) return;
-    Engine::renderOffline (*info.sound, padParams (pad), info.sound->sample->sampleRate, maxFrames, dest);
+    const auto params = padParams (pad);
+    std::shared_ptr<const Sound> turned;
+    if (params.reverse)
+    {
+        const juce::SpinLock::ScopedLockType lock (engineLock);
+        turned = engine.reversed[(size_t) pad];
+    }
+    const auto& s = turned != nullptr ? *turned : *info.sound;
+    Engine::renderOffline (s, params, s.sample->sampleRate, maxFrames, dest, turned != nullptr);
 }
 
 //==============================================================================
@@ -679,7 +749,19 @@ bool KupataProcessor::loadKit (const juce::File& file)
 //==============================================================================
 void KupataProcessor::timerCallback()
 {
-    if (reaper.available()) syncReaper();
+    if (reaper.available() && ++reaperTicks % 5 == 0) syncReaper();
+
+    // Program Change switches kits: 0 the analog kit, 1 on the saved kits in order
+    const int program = pendingProgram.exchange (-1);
+    if (program >= 0 && getKitByProgram())
+    {
+        if (program == 0) loadFactoryKit();
+        else
+        {
+            const auto kits = userKits();
+            if (program - 1 < kits.size()) loadKit (kits[program - 1]);
+        }
+    }
 }
 
 void KupataProcessor::syncReaper()
@@ -736,7 +818,8 @@ int KupataProcessor::buildReaperTracks()
     if (! reaper.available() || reaperHasRoutes.load()) return 0;
     const auto lang = getLanguage();
     juce::StringArray names;
-    for (int p = 0; p < numPads; ++p)
+    const int count = bankInUse (1) ? numPads : bankSize;   // bank B gets tracks only if it is in use
+    for (int p = 0; p < count; ++p)
     {
         auto n = padName (p, lang);
         names.add (n.isNotEmpty() ? n : "Pad " + juce::String (p + 1));

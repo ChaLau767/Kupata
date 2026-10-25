@@ -28,7 +28,7 @@ namespace colours
     inline juce::Colour row (int pad)
     {
         static const juce::Colour c[] { juce::Colour (0xffe2492e), juce::Colour (0xffef8b23), juce::Colour (0xffe6c13d), juce::Colour (0xffe9e2cf) };
-        return c[juce::jlimit (0, 3, pad / 4)];
+        return c[juce::jlimit (0, 3, (pad % bankSize) / 4)];
     }
 }
 
@@ -55,6 +55,18 @@ public:
 };
 
 //==============================================================================
+// A slider that can stop on chosen values while dragged (Shift: free).
+class SnapSlider : public juce::Slider
+{
+public:
+    std::function<double (double)> snap;
+    double snapValue (double v, DragMode mode) override
+    {
+        if (snap && mode != notDragging && ! juce::ModifierKeys::currentModifiers.isShiftDown()) return snap (v);
+        return v;
+    }
+};
+
 // A knob for one parameter of the selected pad, with its name and value underneath.
 class Knob : public juce::Component
 {
@@ -66,7 +78,8 @@ public:
     void attach (juce::AudioProcessorValueTreeState&, const juce::String& paramId);
     void setColour (juce::Colour c) { slider.getProperties().set ("arc", (juce::int64) c.getARGB()); slider.repaint(); }
     std::function<juce::String (float)> extraText;   // a second line under the value
-    juce::Slider slider;
+    const char* extraTip = nullptr;                   // a text key added to the tooltip
+    SnapSlider slider;
     static constexpr int width = 104, dial = 66, height = 118;
 
 private:
@@ -114,7 +127,7 @@ private:
 };
 
 //==============================================================================
-// The sixteen pads, four by four, pad 1 at the bottom left.
+// The sixteen pads of the bank shown, four by four, pad 1 at the bottom left.
 class PadGrid : public juce::Component, public juce::SettableTooltipClient,
                 public juce::DragAndDropTarget, public juce::FileDragAndDropTarget
 {
@@ -172,6 +185,7 @@ public:
 
 private:
     juce::Rectangle<float> waveArea() const;
+    double axisSeconds() const;
     int markerAt (juce::Point<float>) const;   // 0 start, 1 end, -1 none
     void computePeaks();
     KupataProcessor& processor;
@@ -184,6 +198,21 @@ private:
     const Sound* peaksFor = nullptr;
     bool renderedValid = false;
     double renderedSeconds = 0.0;
+};
+
+// The last MIDI note that reached Kupata, and the pad it played.
+class MidiMonitor : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    void paint (juce::Graphics&) override;
+    void update (const KupataProcessor::MidiSeen&, const juce::String& padText, Lang);
+
+private:
+    KupataProcessor::MidiSeen seen;
+    juce::String pad;
+    Lang lang = Lang::en;
+    int shownCount = -1;
+    juce::uint32 lastChange = 0;
 };
 
 // Hit picker, for a sound with several hits.
@@ -277,8 +306,10 @@ private:
     Screen screen;
     HitBar hitBar;
     juce::OwnedArray<Knob> knobs;
-    juce::TextButton gateButton, muteButton, soloButton, monoButton;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> gateAttachment, muteAttachment, soloAttachment, monoAttachment;
+    juce::TextButton gateButton, muteButton, soloButton, monoButton, reverseButton;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> gateAttachment, muteAttachment, soloAttachment, monoAttachment, reverseAttachment;
+    Segmented bankSwitch;
+    MidiMonitor midiMonitor;
     juce::ComboBox chokeBox, outBox;
     Segmented stereoSwitch;
     DragValue noteValue;
@@ -287,7 +318,7 @@ private:
     std::unique_ptr<juce::FileChooser> chooser;
     std::unique_ptr<juce::AlertWindow> dialog;
     int selected = -1, shownVersion = -1, shownOutputs = -1, attachedPad = -1;
-    int copiedPad = -1;
+    int copiedPad = -1, shownLearning = -1;
     bool dropHover = false;
     juce::String message;
     int messageTicks = 0;

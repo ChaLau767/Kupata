@@ -247,7 +247,8 @@ void Knob::setLanguage (Lang l)
 {
     lang = l;
     const juce::String note = u8 (lang == Lang::es ? spec.noteEs : spec.noteEn);
-    slider.setTooltip ((note.isEmpty() ? juce::String() : note + ". ") + tr (lang, "dblclick") + ".");
+    slider.setTooltip ((note.isEmpty() ? juce::String() : note + ". ") + (extraTip != nullptr ? tr (lang, extraTip) + ". " : juce::String())
+                       + tr (lang, "dblclick") + ".");
     repaint();
 }
 
@@ -373,13 +374,15 @@ juce::Rectangle<float> PadGrid::cell (int pad) const
 {
     constexpr float gap = 12.0f;
     const float size = ((float) getWidth() - gap * 3.0f) / 4.0f;
-    const int col = pad % 4, row = 3 - pad / 4;   // pad 1 at the bottom left
+    const int i = pad % bankSize;
+    const int col = i % 4, row = 3 - i / 4;   // pad 1 at the bottom left
     return { col * (size + gap), row * (size + gap), size, size };
 }
 
 int PadGrid::padAt (juce::Point<float> p) const
 {
-    for (int i = 0; i < numPads; ++i) if (cell (i).contains (p)) return i;
+    const int first = processor.getBank() * bankSize;
+    for (int i = first; i < first + bankSize; ++i) if (cell (i).contains (p)) return i;
     return -1;
 }
 
@@ -417,7 +420,8 @@ void PadGrid::paint (juce::Graphics& g)
     const int learning = processor.learningPad();
     bool anySolo = false;
     for (int q = 0; q < numPads; ++q) anySolo = anySolo || processor.padParams (q).solo;
-    for (int pad = 0; pad < numPads; ++pad)
+    const int first = processor.getBank() * bankSize;
+    for (int pad = first; pad < first + bankSize; ++pad)
     {
         const auto info = processor.padInfo (pad);
         const auto params = processor.padParams (pad);
@@ -601,6 +605,15 @@ void PadGrid::filesDropped (const juce::StringArray& files, int x, int y)
 //==============================================================================
 Screen::Screen (KupataProcessor& p) : processor (p) {}
 
+// Seconds shown across the screen: the sound, or longer when it is tuned down and outlasts it.
+double Screen::axisSeconds() const
+{
+    if (info.sound == nullptr) return 1.0;
+    const double regionSec = info.sound->regionLength() / info.sound->sample->sampleRate;
+    if (params.reverse) return regionSec;
+    return juce::jmax (regionSec, params.start * 0.01 * regionSec + renderedSeconds);
+}
+
 juce::Rectangle<float> Screen::waveArea() const
 {
     return getLocalBounds().toFloat().reduced (14.0f, 0.0f).withTrimmedTop (62.0f).withTrimmedBottom (26.0f);
@@ -614,7 +627,7 @@ void Screen::setPad (int p, const KupataProcessor::PadInfo& i, const PadParams& 
     lang = l;
     auto moved = [] (float a, float b) { return std::abs (a - b) > 1.0e-5f; };
     const bool paramsChanged = moved (pp.shape, params.shape) || moved (pp.tune, params.tune) || moved (pp.tone, params.tone)
-                               || moved (pp.comp, params.comp) || moved (pp.start, params.start) || moved (pp.end, params.end);
+                               || moved (pp.comp, params.comp) || moved (pp.start, params.start) || moved (pp.end, params.end) || pp.reverse != params.reverse;
     params = pp;
     if (soundChanged || paramsChanged || ! renderedValid)
     {
@@ -646,7 +659,7 @@ void Screen::computePeaks()
     const double sr = smp.sampleRate;
     const double regionSec = s.regionLength() / sr;
     const double startSec = params.start * 0.01 * regionSec;
-    const double total = juce::jmax (regionSec, startSec + renderedSeconds);
+    const double total = axisSeconds();
     const double framesPerCol = total * sr / cols;
     for (int c = 0; c < cols; ++c)
     {
@@ -660,9 +673,18 @@ void Screen::computePeaks()
         }
         peaksOriginal[(size_t) c] = m / s.peak;
         float q = 0.0f;
-        const double off = startSec * sr;
-        for (int i = (int) (a - off); i < (int) (b - off); ++i)
-            if (i >= 0 && i < (int) rendered.size()) q = juce::jmax (q, std::abs (rendered[(size_t) i]));
+        if (params.reverse)   // the sound plays from the end marker backwards: draw it where it comes from
+        {
+            const double endFrame = params.end * 0.01 * regionSec * sr;
+            for (int i = (int) (endFrame - b); i < (int) (endFrame - a); ++i)
+                if (i >= 0 && i < (int) rendered.size()) q = juce::jmax (q, std::abs (rendered[(size_t) i]));
+        }
+        else
+        {
+            const double off = startSec * sr;
+            for (int i = (int) (a - off); i < (int) (b - off); ++i)
+                if (i >= 0 && i < (int) rendered.size()) q = juce::jmax (q, std::abs (rendered[(size_t) i]));
+        }
         peaksRendered[(size_t) c] = q / s.peak;
     }
 }
@@ -704,6 +726,12 @@ void Screen::paint (juce::Graphics& g)
     juce::String detail = secondsText (s.regionLength() / sr, lang) + "   " + tr (lang, "pitchOf") + " ";
     detail << (s.pitch > 0.0f ? pitchName (s.pitch * std::pow (2.0f, params.tune / 12.0f), lang) : tr (lang, "noPitch"));
     g.drawText (detail, line2, juce::Justification::centredLeft, false);
+    if (params.reverse)
+    {
+        g.setColour (colours::row (pad).darker (0.4f));
+        g.setFont (semi (12.0f));
+        g.drawText (juce::String::fromUTF8 ("◀ ") + tr (lang, "playsBackwards"), line2, juce::Justification::centredRight, false);
+    }
 
     if (peaksFor != info.sound.get() || (int) peaksOriginal.size() != (int) waveArea().getWidth()) computePeaks();
     const auto area = waveArea();
@@ -729,7 +757,7 @@ void Screen::paint (juce::Graphics& g)
 
     // trim markers, measured on the sound itself
     const double regionSec = s.regionLength() / sr;
-    const double total = juce::jmax (regionSec, params.start * 0.01 * regionSec + renderedSeconds);
+    const double total = axisSeconds();
     auto xForPercent = [&] (float pct) { return area.getX() + (float) (pct * 0.01 * regionSec / total) * area.getWidth(); };
     const float xs = xForPercent (params.start), xe = xForPercent (params.end);
     g.setColour (colours::lcd.withAlpha (0.6f));
@@ -769,7 +797,7 @@ int Screen::markerAt (juce::Point<float> p) const
     const auto area = waveArea();
     const double sr = info.sound->sample->sampleRate;
     const double regionSec = info.sound->regionLength() / sr;
-    const double total = juce::jmax (regionSec, params.start * 0.01 * regionSec + renderedSeconds);
+    const double total = axisSeconds();
     auto xFor = [&] (float pct) { return area.getX() + (float) (pct * 0.01 * regionSec / total) * area.getWidth(); };
     if (p.y < area.getY() - 12.0f || p.y > area.getBottom()) return -1;
     const float ds = std::abs (p.x - xFor (params.start)), de = std::abs (p.x - xFor (params.end));
@@ -799,7 +827,7 @@ void Screen::mouseDrag (const juce::MouseEvent& e)
     const auto area = waveArea();
     const double sr = info.sound->sample->sampleRate;
     const double regionSec = info.sound->regionLength() / sr;
-    const double total = juce::jmax (regionSec, params.start * 0.01 * regionSec + renderedSeconds);
+    const double total = axisSeconds();
     float pct = (float) ((e.position.x - area.getX()) / area.getWidth() * total / regionSec * 100.0);
     pct = dragMarker == 0 ? juce::jlimit (0.0f, params.end - 0.5f, pct) : juce::jlimit (params.start + 0.5f, 100.0f, pct);
     if (auto* param = processor.apvts.getParameter (padId (pad, dragMarker == 0 ? "start" : "end")))
@@ -828,9 +856,9 @@ HitBar::HitBar (KupataProcessor& p) : processor (p)
 void HitBar::resized()
 {
     auto r = getLocalBounds();
-    toPads.setBounds (r.removeFromRight (120));
+    toPads.setBounds (r.removeFromRight (104));
     r.removeFromRight (8);
-    whole.setBounds (r.removeFromRight (74));
+    whole.setBounds (r.removeFromRight (62));
     r.removeFromRight (8);
     prev.setBounds (r.removeFromLeft (30));
     next.setBounds (r.removeFromRight (30));
@@ -851,13 +879,40 @@ void HitBar::setPad (int p, const KupataProcessor::PadInfo& info, Lang l)
 
 void HitBar::paint (juce::Graphics& g)
 {
-    auto r = getLocalBounds().toFloat().withTrimmedLeft (34.0f).withTrimmedRight (34.0f + 74.0f + 8.0f + 120.0f + 8.0f);
+    auto r = getLocalBounds().toFloat().withTrimmedLeft (34.0f).withTrimmedRight (34.0f + 62.0f + 8.0f + 104.0f + 8.0f);
     drawWell (g, r);
     g.setColour (hit == 0 ? colours::sub : colours::text);
     g.setFont (mono (12.5f));
     const juce::String t = hit == 0 ? juce::String (numHits) + " " + tr (lang, "hits")
                                     : tr (lang, "hit") + " " + juce::String (hit) + " / " + juce::String (numHits);
     g.drawText (t, r, juce::Justification::centred, false);
+}
+
+//==============================================================================
+void MidiMonitor::update (const KupataProcessor::MidiSeen& s, const juce::String& padText, Lang l)
+{
+    if (s.count != shownCount) { shownCount = s.count; lastChange = juce::Time::getMillisecondCounter(); }
+    seen = s; pad = padText; lang = l;
+    repaint();
+}
+
+void MidiMonitor::paint (juce::Graphics& g)
+{
+    auto r = getLocalBounds().toFloat();
+    const float age = (float) (juce::Time::getMillisecondCounter() - lastChange);
+    const float glow = seen.note < 0 ? 0.0f : juce::jlimit (0.0f, 1.0f, 1.0f - age / 900.0f);
+    auto dot = r.removeFromLeft (14.0f).withSizeKeepingCentre (8.0f, 8.0f);
+    g.setColour (colours::well);
+    g.fillEllipse (dot);
+    g.setColour (colours::accent.withAlpha (0.15f + 0.85f * glow));
+    g.fillEllipse (dot.reduced (1.0f));
+    r.removeFromLeft (4.0f);
+    g.setFont (mono (12.0f));
+    g.setColour (colours::faint);
+    juce::String t = "MIDI";
+    if (seen.note >= 0) t << "  " << noteName (seen.note, lang) << " " << juce::String (seen.velocity) << "  " << pad;
+    g.setColour (seen.note >= 0 && glow > 0.0f ? colours::sub : colours::faint);
+    g.drawText (t, r, juce::Justification::centredLeft, true);
 }
 
 //==============================================================================
@@ -1018,6 +1073,12 @@ juce::String Browser::getTooltipForRow (int) { return tr (lang, "browserTip"); }
 //==============================================================================
 Content::Content (KupataProcessor& p)
     : processor (p), browser (p), pads (p), screen (p), hitBar (p),
+      bankSwitch ({ "A", "B" }, [this] { return processor.getBank(); },
+                  [this] (int b) {
+                      processor.setBank (b);
+                      selectPad (b * bankSize + processor.getSelectedPad() % bankSize);
+                      pads.refresh();
+                  }),
       stereoSwitch ({ "M", "ST" },
                     [this] { return processor.padInfo (processor.getSelectedPad()).routing.stereo ? 1 : 0; },
                     [this] (int i) {
@@ -1108,11 +1169,23 @@ Content::Content (KupataProcessor& p)
         return noteName (juce::roundToInt (69.0f + 12.0f * std::log2 (hz / 440.0f)), lang);
     };
 
-    for (auto* b : { &gateButton, &muteButton, &soloButton, &monoButton })
+    // Tune stops on exact notes when the sound has a clear pitch (Shift: free)
+    knobs[1]->extraTip = "tuneSnapTip";
+    knobs[1]->slider.snap = [this] (double tune) {
+        const auto info = processor.padInfo (processor.getSelectedPad());
+        if (info.sound == nullptr || info.sound->pitch <= 0.0f) return tune;
+        const double own = 69.0 + 12.0 * std::log2 (info.sound->pitch / 440.0);   // the sound's note, with its cents
+        return juce::jlimit (-24.0, 24.0, std::round (own + tune) - own);
+    };
+
+    for (auto* b : { &gateButton, &muteButton, &soloButton, &monoButton, &reverseButton })
     {
         addAndMakeVisible (*b);
         b->setClickingTogglesState (true);
     }
+    reverseButton.getProperties().set ("small", true);
+    addAndMakeVisible (bankSwitch);
+    addAndMakeVisible (midiMonitor);
     soloButton.getProperties().set ("lit", (juce::int64) colours::row (8).getARGB());
     muteButton.getProperties().set ("lit", (juce::int64) colours::sub.getARGB());
 
@@ -1182,7 +1255,9 @@ void Content::updateTexts()
     const auto name = processor.getKitName();
     kitButton.setButtonText (tr (lang, "kit") + ": " + (name.isNotEmpty() ? name : tr (lang, "factoryKit")));
     kitButton.setTooltip (tr (lang, "kitTip"));
-    notesButton.setButtonText (tr (lang, "notes"));
+    const int map = processor.currentNoteMap();
+    const char* mapKey = map == mapChromatic ? "mapChromatic" : map == mapWhite ? "mapWhite" : map == mapGeneralMidi ? "mapGm" : "mapCustom";
+    notesButton.setButtonText (tr (lang, "notes") + ": " + tr (lang, mapKey));
     notesButton.setTooltip (tr (lang, "notesTip"));
     multiOutButton.setButtonText (tr (lang, "multiOut"));
     multiOutButton.setTooltip (tr (lang, processor.reaperAvailable() ? "multiOutReaperTip" : "multiOutTip"));
@@ -1196,6 +1271,10 @@ void Content::updateTexts()
     soloButton.setButtonText (tr (lang, "solo"));
     monoButton.setButtonText (tr (lang, "mono"));
     monoButton.setTooltip (tr (lang, "monoTip"));
+    reverseButton.setButtonText (tr (lang, "reverse"));
+    reverseButton.setTooltip (tr (lang, "reverseTip"));
+    bankSwitch.setTooltip (tr (lang, "bankTip"));
+    midiMonitor.setTooltip (tr (lang, "midiTip"));
     chokeBox.setTooltip (tr (lang, "chokeTip"));
     outBox.setTooltip (tr (lang, "outTip"));
     stereoSwitch.setLabels ({ tr (lang, "monoShort"), tr (lang, "stereoShort") });
@@ -1230,6 +1309,8 @@ void Content::attachPad (int pad)
     muteAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, padId (pad, "mute"), muteButton);
     soloAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, padId (pad, "solo"), soloButton);
     monoAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, padId (pad, "mono"), monoButton);
+    reverseAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.apvts, padId (pad, "reverse"), reverseButton);
+    reverseButton.getProperties().set ("lit", (juce::int64) colours::row (pad).getARGB());
     monoButton.getProperties().set ("lit", (juce::int64) colours::row (pad).getARGB());
     gateButton.getProperties().set ("lit", (juce::int64) colours::row (pad).getARGB());
 }
@@ -1270,6 +1351,7 @@ void Content::refreshPad (bool force)
         fillOutputs();
         noteValue.repaint();
         for (auto* k : knobs) k->setEnabled (info.loaded());
+        reverseButton.setEnabled (info.loaded());
     }
     screen.setPad (pad, info, processor.padParams (pad), lang);
     learnButton.setButtonText (processor.learningPad() == pad ? tr (lang, "learning") : u8 (lang == Lang::es ? "Aprender" : "Learn"));
@@ -1279,7 +1361,7 @@ void Content::refreshPad (bool force)
 void Content::timerCallback()
 {
     processor.readTelemetry (telemetry);
-    if (processor.pollLearn()) { refreshPad (true); pads.repaint(); }
+    if (processor.pollLearn()) { refreshPad (true); pads.repaint(); updateTexts(); }
     const int v = processor.getVersion();
     if (v != shownVersion)
     {
@@ -1290,11 +1372,31 @@ void Content::timerCallback()
     }
     else refreshPad (false);
     if (processor.numOutputs() != shownOutputs) { fillOutputs(); repaint(); }
+    // MIDI: the monitor, and the pad it played becomes the selected one if asked
+    const int midiPad = processor.takeMidiPad();
+    if (midiPad >= 0 && processor.getSelectByMidi() && midiPad != processor.getSelectedPad())
+    {
+        if (midiPad / bankSize != processor.getBank()) { processor.setBank (midiPad / bankSize); bankSwitch.repaint(); pads.refresh(); }
+        selectPad (midiPad);
+    }
+    {
+        const auto seen = processor.lastMidi();
+        juce::String padText;
+        if (seen.note >= 0)
+        {
+            for (int p = 0; p < numPads && padText.isEmpty(); ++p)
+                if (processor.padInfo (p).routing.note == seen.note)
+                    padText = juce::String (p + 1) + (processor.padInfo (p).loaded() ? " " + processor.padName (p, lang) : juce::String());
+            if (padText.isEmpty()) padText = tr (lang, "noPad");
+        }
+        midiMonitor.update (seen, padText, lang);
+    }
     pads.update (telemetry, lang);
     screen.update (telemetry);
     output.repaint();
     velocity.repaint();
     if (messageTicks > 0 && --messageTicks == 0) { message.clear(); repaint(); }
+    if (processor.learningPad() != shownLearning) { shownLearning = processor.learningPad(); repaint(); }
 }
 
 //==============================================================================
@@ -1367,17 +1469,16 @@ void Content::showKitMenu()
     m.addItem (1, tr (lang, "factoryKit"));
     m.addSeparator();
     m.addSectionHeader (tr (lang, "yourKits"));
-    const auto folder = processor.kitsFolder();
-    juce::Array<juce::File> kits;
-    if (folder.isDirectory())
-        for (const auto& e : juce::RangedDirectoryIterator (folder, false, "*.kupata")) kits.add (e.getFile());
-    std::sort (kits.begin(), kits.end(), [] (const juce::File& a, const juce::File& b) { return a.getFileName().compareNatural (b.getFileName()) < 0; });
+    const auto kits = processor.userKits();
     if (kits.isEmpty()) m.addItem (-1, tr (lang, "noKits"), false);
-    for (int i = 0; i < kits.size(); ++i) m.addItem (100 + i, kits[i].getFileNameWithoutExtension());
+    for (int i = 0; i < kits.size(); ++i)   // with the Program Change that loads each one
+        m.addItem (100 + i, kits[i].getFileNameWithoutExtension() + (processor.getKitByProgram() ? "   (PC " + juce::String (i + 1) + ")" : juce::String()));
     m.addSeparator();
     m.addItem (2, tr (lang, "saveKit"));
     m.addItem (3, tr (lang, "loadKit"));
     m.addItem (4, tr (lang, "openKitsFolder"));
+    m.addSeparator();
+    m.addItem (5, tr (lang, "kitByProgram"), true, processor.getKitByProgram());
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&kitButton), [this, kits] (int r) {
         if (r == 1) processor.loadFactoryKit();
         if (r == 2) saveKitDialog();
@@ -1389,6 +1490,7 @@ void Content::showKitMenu()
             });
         }
         if (r == 4) { processor.kitsFolder().createDirectory(); processor.kitsFolder().startAsProcess(); }
+        if (r == 5) processor.setKitByProgram (! processor.getKitByProgram());
         if (r >= 100 && r - 100 < kits.size() && ! processor.loadKit (kits[r - 100])) { message = tr (lang, "kitError"); messageTicks = 120; repaint(); }
         pads.refresh();
         refreshPad (true);
@@ -1420,14 +1522,22 @@ void Content::saveKitDialog()
 
 void Content::showNotesMenu()
 {
+    const int map = processor.currentNoteMap();
     juce::PopupMenu m;
-    m.addItem (1, tr (lang, "chromatic"));
-    m.addItem (2, tr (lang, "whiteKeys"));
-    m.addItem (3, tr (lang, "generalMidi"));
+    m.addItem (1, tr (lang, "chromatic"), true, map == mapChromatic);
+    m.addItem (4, tr (lang, "fromKey"));
+    m.addItem (2, tr (lang, "whiteKeys"), true, map == mapWhite);
+    m.addItem (3, tr (lang, "generalMidi"), true, map == mapGeneralMidi);
+    m.addSeparator();
+    m.addItem (5, tr (lang, "selectByMidi"), true, processor.getSelectByMidi());
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&notesButton), [this] (int r) {
-        if (r >= 1) processor.setNotePreset (r - 1);
+        if (r >= 1 && r <= 3) processor.setNotePreset (r - 1);
+        if (r == 4) processor.startBaseLearn();
+        if (r == 5) processor.setSelectByMidi (! processor.getSelectByMidi());
+        updateTexts();
         pads.repaint();
         noteValue.repaint();
+        repaint();
     });
 }
 
@@ -1444,16 +1554,19 @@ void Content::resized()
     // pads, and the kit's settings under them
     const int padX = 246, padW = 470;
     pads.setBounds (padX, 76, padW, padW);
+    midiMonitor.setBounds (430, 16, 222, 28);
     const int rowY = 76 + padW + 22;
     output.setBounds (padX, rowY, 150, 30);
     velocity.setBounds (padX + 160, rowY, 150, 30);
     notesButton.setBounds (padX + 320, rowY, padW - 320, 30);
     multiOutButton.setBounds (padX + 320, rowY + 40, padW - 320, 30);
+    bankSwitch.setBounds (padX, rowY + 40, 96, 30);
 
     // the selected pad
     const int px = padX + padW + 18, pw = baseWidth - 16 - px;
     screen.setBounds (px, 76, pw, 214);
-    hitBar.setBounds (px, 300, pw, 28);
+    reverseButton.setBounds (px, 300, 88, 28);
+    hitBar.setBounds (px + 96, 300, pw - 96, 28);
     const int kx[] { px, px + (pw - Knob::width) / 2, px + pw - Knob::width };
     for (int i = 0; i < knobs.size(); ++i)
         knobs[i]->setBounds (kx[i % 3], 342 + (i / 3) * (Knob::height + 6), Knob::width, Knob::height);
@@ -1500,6 +1613,10 @@ void Content::paint (juce::Graphics& g)
     g.setColour (colours::sub);
     g.setFont (sans (14.0f));
     g.drawText (tr (lang, "subtitle"), juce::Rectangle<float> (140.0f, 14.0f, 260.0f, 28.0f), juce::Justification::centredLeft, false);
+    const float subtitleWidth = juce::GlyphArrangement::getStringWidth (sans (14.0f), tr (lang, "subtitle"));
+    g.setColour (colours::faint);
+    g.setFont (mono (12.0f));
+    g.drawText (JucePlugin_VersionString, juce::Rectangle<float> (140.0f + subtitleWidth + 10.0f, 15.0f, 80.0f, 28.0f), juce::Justification::centredLeft, false);
 
     // outputs of the track
     const int outs = processor.numOutputs();
@@ -1521,8 +1638,13 @@ void Content::paint (juce::Graphics& g)
     // a line under the pads for messages and hints
     g.setColour (message.isNotEmpty() ? colours::accent : colours::faint);
     g.setFont (sans (13.0f));
-    const auto hint = message.isNotEmpty() ? message : (processor.learningPad() >= 0 ? tr (lang, "learning") : tr (lang, "dropHere"));
-    g.drawFittedText (hint, juce::Rectangle<int> (pads.getX(), multiOutButton.getY(), 310, 30), juce::Justification::centredLeft, 2);
+    const int learning = processor.learningPad();
+    const auto hint = message.isNotEmpty() ? message
+                    : learning == KupataProcessor::learnBase ? tr (lang, "fromKeyWait")
+                    : learning >= 0 ? tr (lang, "learning") : tr (lang, "dropHere");
+    if (learning != -1) g.setColour (colours::accent);
+    g.drawFittedText (hint, juce::Rectangle<int> (bankSwitch.getRight() + 12, multiOutButton.getY(), multiOutButton.getX() - bankSwitch.getRight() - 20, 30),
+                      juce::Justification::centredLeft, 2);
 }
 
 void Content::paintOverChildren (juce::Graphics& g)

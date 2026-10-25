@@ -264,6 +264,27 @@ int main (int argc, char** argv)
                "a pad moves with its knobs and the other comes back");
         d.setHit (11, 0);
         check (d.hitsToPads (11) == 4 && d.padInfo (14).hit == 4, "hits to pads: four pads filled");
+        // bank B, reverse and the note maps travel with the session
+        {
+            KupataProcessor e;
+            juce::String err;
+            check (e.currentNoteMap() == kupata::mapGeneralMidi && e.padInfo (16).routing.note == 72, "the kit starts with Sitala's notes; bank B from C5");
+            check (! e.bankInUse (1) && e.loadFile (20, writeTestFile ("kupata-bankb.wav", 1, 0.5), err) && e.bankInUse (1), "a sound on pad 21, in bank B");
+            e.setParam ("p21_reverse", 1.0f);
+            e.setNotePreset (kupata::mapChromatic, 48);
+            check (e.currentNoteMap() == -1 && e.padInfo (0).routing.note == 48 && e.padInfo (31).routing.note == 79, "in a row from C3: pads 1-32 on 48-79");
+            juce::MemoryBlock blockB;
+            e.getStateInformation (blockB);
+            KupataProcessor f;
+            f.setStateInformation (blockB.getData(), (int) blockB.getSize());
+            check (f.padInfo (20).loaded() && f.padParams (20).reverse && f.padInfo (20).routing.note == 68, "bank B, reverse and notes restored");
+            std::vector<float> fwd, rev;
+            f.renderPicture (20, rev, 48000);
+            f.setParam ("p21_reverse", 0.0f);
+            f.renderPicture (20, fwd, 48000);
+            auto rmsOf = [] (const std::vector<float>& x, size_t a, size_t b) { double s2 = 0; for (size_t i = a; i < b && i < x.size(); ++i) s2 += x[i] * x[i]; return std::sqrt (s2 / std::max<size_t> (1, b - a)); };
+            check (! rev.empty() && rmsOf (rev, 0, 2000) < 0.2 * rmsOf (fwd, 0, 2000), "the reversed pad starts quietly, where the sound ends");
+        }
         std::printf (failures == 0 ? "\nall state tests passed\n" : "\n%d state tests failed\n", failures);
         return failures == 0 ? 0 : 1;
     }
@@ -338,6 +359,18 @@ int main (int argc, char** argv)
             wait (1200);
             check (proc.padInfo (6).routing.out == 0, "turning multi-out off sticks (it is only done once)");
         }
+        // 3. with bank B in use, a track for each of the 32 pads, on 64 channels
+        fake::tracks.clear();
+        fake::insert (0, true);
+        host.parent = fake::tracks[0].get();
+        {
+            KupataProcessor proc;
+            proc.setPlayConfigDetails (0, 64, 48000.0, 512);
+            proc.getVST3ClientExtensions()->setIHostApplication (&host);
+            proc.loadFactory (17, 16);   // a low conga on pad 18
+            check (proc.buildReaperTracks() == 32 && fake::tracks[0]->nchan == 64 && fake::tracks[18]->name == "Low conga"
+                   && proc.padInfo (17).routing.out == 34, "bank B in use: 32 tracks on 64 channels");
+        }
         std::printf (failures == 0 ? "\nall REAPER tests passed\n" : "\n%d REAPER tests failed\n", failures);
         return failures == 0 ? 0 : 1;
     }
@@ -396,6 +429,46 @@ int main (int argc, char** argv)
         proc.startLearn (5);
         play (90, 2);
         check (proc.pollLearn() && proc.padInfo (5).routing.note == 90, "note learn: pad 6 now plays on 90");
+
+        // the MIDI monitor, and a pad played by MIDI
+        play (42, 2);
+        check (proc.lastMidi().note == 42 && proc.lastMidi().velocity == 120 && proc.takeMidiPad() == 2, "the monitor shows the note (F#2) and the pad it played (3)");
+        // pads 1-32 in a row from the next key
+        proc.startBaseLearn();
+        play (60, 2);
+        check (proc.pollLearn() && proc.padInfo (0).routing.note == 60 && proc.padInfo (15).routing.note == 75, "in a row from the key played: pad 1 on C4");
+        proc.setNotePreset (kupata::mapGeneralMidi);
+        // bank B plays on its own notes and outputs
+        juce::String err2;
+        proc.loadFactory (16, 0);
+        proc.setMultiOut (true, 64);
+        juce::AudioProcessor::BusesLayout wide;
+        wide.outputBuses.add (juce::AudioChannelSet::discreteChannels (64));
+        check (proc.setBusesLayout (wide), "64 outputs");
+        {
+            juce::AudioBuffer<float> buf (64, 512);
+            float peak33 = 0.0f;
+            for (int b = 0; b < 20; ++b)
+            {
+                buf.clear();
+                juce::MidiBuffer midi;
+                if (b == 0) midi.addEvent (juce::MidiMessage::noteOn (1, 72, (juce::uint8) 120), 0);
+                proc.processBlock (buf, midi);
+                peak33 = juce::jmax (peak33, buf.getMagnitude (32, 0, 512));
+            }
+            check (peak33 > 0.1f, "pad 17 (bank B) on C5, out of 33-34 (peak " + juce::String (peak33, 2) + ")");
+        }
+        // Program Change switches kits
+        proc.setKitByProgram (true);
+        proc.clearPad (0);
+        {
+            juce::AudioBuffer<float> buf (64, 512);
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::programChange (1, 0), 0);
+            proc.processBlock (buf, midi);
+        }
+        wait (400);
+        check (proc.padInfo (0).loaded() && ! proc.padInfo (16).loaded(), "Program Change 0 brings back the analog kit");
         std::printf (failures == 0 ? "\nall playback tests passed\n" : "\n%d playback tests failed\n", failures);
         return failures == 0 ? 0 : 1;
     }
@@ -414,7 +487,13 @@ int main (int argc, char** argv)
     proc->setParam ("p1_shape", 35.0f);
     proc->setParam ("p1_comp", 40.0f);
     proc->setParam ("p1_end", 82.0f);
-    proc->setParam ("p8_mute", 1.0f);
+    if (variant == "bankb")
+    {
+        proc->setBank (1);
+        proc->loadFactory (16, 16); proc->loadFactory (17, 17); proc->loadFactory (18, 18); proc->loadFactory (20, 1);
+        proc->setSelectedPad (20);
+        proc->setParam ("p21_reverse", 1.0f);
+    }
     if (variant == "hits")
     {
         juce::String error;
@@ -428,6 +507,7 @@ int main (int argc, char** argv)
     editor->setSize (width, height);
     run (*proc, 40);
     run (*proc, 12, { { 0, 36 }, { 2, 42 }, { 4, 38 } });
+    run (*proc, 2, { { 0, variant == "bankb" ? 76 : 38 } });   // the last note, for the MIDI monitor
     for (int i = 0; i < 6; ++i)
     {
         juce::MessageManager::getInstance()->runDispatchLoopUntil (40);

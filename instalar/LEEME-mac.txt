@@ -27,8 +27,11 @@ Primeros pasos
     dieciséis sonidos sintetizados al estilo de las cajas de ritmo de los 80,
     entre ellos tres congas.
   - El kit está ordenado como el kit 808 de Sitala y usa sus mismas notas
-    (General MIDI: bombo en Do2/C2, tambor en Re2…). Con «Notas» podés pasar
-    a cromático desde Do2 o a teclas blancas.
+    (General MIDI: bombo en Do2/C2, tambor en Re2…). Si tu controlador toca
+    los pads en un orden raro: «Notas» > «Seguidas, desde la próxima tecla
+    que toques», y tocá el primer pad de tu controlador. Arriba, el monitor
+    MIDI muestra cada nota que llega y qué pad toca.
+  - Hay dos bancos de 16 pads, A y B (botones debajo de la grilla).
   - Hacé clic en un pad para tocarlo y elegirlo; sus seis perillas aparecen
     a la derecha. Soltá un archivo de audio sobre un pad para cambiar su sonido.
   - Cada perilla es un parámetro del DAW («P1 Shape», «P3 Tone»…), con su
