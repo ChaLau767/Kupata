@@ -68,9 +68,10 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then EXT=.exe; else EXT=; fi
           # each failed check also appears as an error in the summary page
           prueba () {
-            "$@" 2>&1 | tee salida.txt
-            local status=${PIPESTATUS[0]}
-            grep -E "^FAIL|failed|error" salida.txt | head -20 | while read -r line; do echo "::error::$line"; done
+            local status=0
+            "$@" > salida.txt 2>&1 || status=$?
+            cat salida.txt
+            { grep -E "^FAIL|failed|error" salida.txt || true; } | head -20 | while read -r line; do echo "::error::$line"; done
             if [ $status -ne 0 ]; then echo "::error::$* exited with $status"; fi
             return $status
           }
