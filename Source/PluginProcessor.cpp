@@ -749,7 +749,7 @@ bool KupataProcessor::loadKit (const juce::File& file)
 //==============================================================================
 void KupataProcessor::timerCallback()
 {
-    if (reaper.available() && ++reaperTicks % 5 == 0) syncReaper();
+    if (reaper.available() && reaperTicks++ % 5 == 0) syncReaper();   // at once, then twice a second
 
     // Program Change switches kits: 0 the analog kit, 1 on the saved kits in order
     const int program = pendingProgram.exchange (-1);

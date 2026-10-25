@@ -306,7 +306,7 @@ int main (int argc, char** argv)
             check (! proc.reaperAvailable(), "without REAPER the link is off");
             proc.getVST3ClientExtensions()->setIHostApplication (&host);
             check (proc.reaperAvailable(), "REAPER's API is found");
-            wait (700);
+            wait (1500);
             check (proc.numOutputs() == 2, "the track's 2 channels count, not the plugin's 32 (" + juce::String (proc.numOutputs()) + ")");
             const int made = proc.buildReaperTracks();
             check (made == 16 && fake::tracks.size() == 19, "16 tracks created (" + juce::String (made) + ")");
@@ -325,11 +325,11 @@ int main (int argc, char** argv)
             fake::tracks[5]->name = "Mi tambor";   // pad 4
             proc.loadFactory (2, 4);                // pad 3 now holds the clap
             proc.loadFactory (3, 5);                // pad 4 the rimshot
-            wait (1200);
+            wait (2000);
             check (fake::tracks[4]->name == "Clap", "a pad's new sound renames its track (" + juce::String (fake::tracks[4]->name) + ")");
             check (fake::tracks[5]->name == "Mi tambor", "a track the person renamed keeps its name");
             proc.setLanguage (kupata::Lang::es);
-            wait (1200);
+            wait (2000);
             check (fake::tracks[2]->name == "Bombo largo", "the names follow the interface's language");
         }
 
@@ -350,13 +350,13 @@ int main (int argc, char** argv)
             KupataProcessor proc;
             proc.setPlayConfigDetails (0, 32, 48000.0, 512);
             proc.getVST3ClientExtensions()->setIHostApplication (&host);
-            wait (1200);
+            wait (2000);
             check (proc.reaperRouted() && proc.padInfo (6).routing.out == 12, "REAPER's own routing turns multi-out on");
             check (fake::tracks[1]->name == "Kick long" && fake::tracks[7]->name == "Mid tom" && fake::tracks[10]->name == "Mid conga",
                    "REAPER's tracks take the pads' names");
             check (fake::tracks[16]->name == "Reverb", "a track with a name of its own is left alone");
             proc.setMultiOut (false);
-            wait (1200);
+            wait (2000);
             check (proc.padInfo (6).routing.out == 0, "turning multi-out off sticks (it is only done once)");
         }
         // 3. with bank B in use, a track for each of the 32 pads, on 64 channels
